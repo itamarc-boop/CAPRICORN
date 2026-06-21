@@ -1,0 +1,5 @@
+# pnpm 10+ config. Permit sharp's postinstall (used by next/image if we ever
+# add an Image component). Without this, `pnpm dev` aborts with
+# ERR_PNPM_IGNORED_BUILDS on first run.
+allowBuilds:
+  sharp: true

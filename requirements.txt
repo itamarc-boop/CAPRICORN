@@ -1,0 +1,27 @@
+# Capricorn GitHub Actions worker — full Python dependency set.
+# This is what `python tools/run_pipeline.py` and the tools it calls need at
+# runtime (discovery, enrichment, scoring, evidence/judgment via Anthropic,
+# Supabase sync, and the Google Sheets export). Installed in CI before the
+# orchestrator runs. Conservative lower bounds only — let CI resolve the latest
+# compatible patch releases.
+
+# HTTP + scraping (research_company_website.py, uk_importers_lookup.py)
+requests>=2.31
+lxml>=5.1
+
+# Env loading (every tool: dotenv from webapp/.env.local then root .env)
+python-dotenv>=1.0
+
+# LLM judgment / evidence (bdr_judge.py, extract_evidence.py, verify_import_evidence.py)
+anthropic>=0.40
+
+# Supabase sync (sync_leads_to_supabase.py) + run-status updates (run_pipeline.py)
+supabase>=2.4
+
+# Client feedback ingestion (extract_feedback_from_xlsx.py)
+openpyxl>=3.1
+
+# Google Sheets / Drive delivery (export_to_sheets.py)
+google-api-python-client>=2.100
+google-auth>=2.27
+google-auth-oauthlib>=1.2

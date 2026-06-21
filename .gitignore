@@ -1,0 +1,43 @@
+# ── Secrets / environment (NEVER commit real env or key files) ──
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+**/.env.local
+**/.env.*.local
+credentials.json
+token.json
+*service-account*.json
+*service_account*.json
+gcp-*.json
+# (env example templates like .env.local.example are intentionally NOT ignored)
+
+# ── Dependencies ──
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# ── Build output ──
+.next/
+**/.next/
+.vercel/
+dist/
+build/
+out/
+
+# ── Python ──
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# ── Pipeline scratch ──
+.tmp/
+
+# ── OS / editor ──
+.DS_Store
+*.log

@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "source": "companies.xlsx (auto-extracted; HUMAN MUST VERIFY)",
+  "general_notes": [
+    "DATO IMPORTANTE: ALGO QUE CALIFICA MUCHO A UNA EMPRESA, ES QUE VENDA SUS MARCAS PROPIAS. Si vende marcas de terceros, o marcas globales tiende a no ser relevante (por ejemplo, un distribuidor de comida de mascotas que venda Eukanuba, Pedigree y Hills)",
+    "CONCLUSIÓN GENERAL: HAY MUCHAS EMPRESAS MANUFACTURERAS, CON LAS QUE HAY PRODUCT OVERLAP, PERO LO MEJOR SON LOS IMPORTADORES CON LOS QUE PUEDA VENDER VOLUMEN",
+    "Looking across the full list analyzed — Pelemix, Politiv, Metzer, Timac Agro, Syngenta, BioBee — the lead generation source appears to be pulling Israeli agtech and agri-manufacturing companies. These are almost all manufacturers, not importers or distributors. Israel has a strong agri-tech manufacturing tradition, which makes it a poor hunting ground for Capricorn's ICP.",
+    "The exception within the Israeli market would be agricultural input distributors or importers who bring physical goods into Israel from Asia — a smaller but real segment. If the goal is to prospect in Israel, the search filter should shift from \"Israeli agriculture companies\" to \"Israeli importers of agricultural plastics, films, or irrigation accessories.\""
+  ],
+  "labels": [
+    {
+      "iteration": 3,
+      "country": "United Kingdom",
+      "company": "Bunzl Cleaning and Hygiene Supplies",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 85,
+      "verdict": "reject",
+      "pattern": "group-subsidiary-local-mismatch",
+      "client_comment": "Especial esta empresa. Es cliente nuestro en Chile, pero no es relevante en todos lados. En UK por ejemplo conversé con ellos, pero compran a importadores locales y venden marcas de terceros, no propias. No relevante en UK."
+    },
+    {
+      "iteration": 3,
+      "country": "United Kingdom",
+      "company": "Green-tech",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 85,
+      "verdict": "t2",
+      "pattern": "volume-dependent-tier",
+      "client_comment": "✅. Como tienen su foco en landscaping y forestry habría que ver si son T1 o T2, dependiendo del volumen que vendan de los productos que ofrece Capricorn"
+    },
+    {
+      "iteration": 3,
+      "country": "United Kingdom",
+      "company": "RAJAPACK UK",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 85,
+      "verdict": "t3",
+      "pattern": "adjacent-category-mismatch",
+      "client_comment": "No tan relevante. Es más empresa de embalajes que de foodservice disposables"
+    },
+    {
+      "iteration": 3,
+      "country": "United Kingdom",
+      "company": "Thomas Ridley Foodservice",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 70,
+      "verdict": "reject",
+      "pattern": "food-distributor-not-disposables",
+      "client_comment": "❌. Empresa de comida, no de disposables de foodservice"
+    },
+    {
+      "iteration": 3,
+      "country": "United Kingdom",
+      "company": "Pedigree Wholesale Limited",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 55,
+      "verdict": "reject",
+      "pattern": "no-own-brand-reseller",
+      "client_comment": "❌. No tienen marca propia, venden marcas de terceros."
+    },
+    {
+      "iteration": 3,
+      "country": "Spain",
+      "company": "Textil Villa de Pego, S.L.",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 82,
+      "verdict": "t2",
+      "pattern": "claimed-import-without-evidence",
+      "client_comment": "✅. Lo único que me hace dudar es que son fábrica, entonces no sé si importarán productos o producirán todo. Claude dice que importan pq su range es muy grande, pero sin un claim real. Habría que ver"
+    },
+    {
+      "iteration": 3,
+      "country": "Spain",
+      "company": "TATAY S.A.",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 50,
+      "verdict": "reject",
+      "pattern": "pure-manufacturer-no-import",
+      "client_comment": "❌. Fábrica full, no importan nada"
+    },
+    {
+      "iteration": 3,
+      "country": "Spain",
+      "company": "DIBOSCH",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 50,
+      "verdict": "reject",
+      "pattern": "no-own-brand-reseller",
+      "client_comment": "❌. Distribuyen marcas de terceros"
+    },
+    {
+      "iteration": 3,
+      "country": "Spain",
+      "company": "Alpha Spirit",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 50,
+      "verdict": "t3",
+      "pattern": "producer-non-priority",
+      "client_comment": "✅. No sé si es Tier 2 o 3. Los conozco y son productores de todo. No hay mucho que venderles, o que quieran comprar, prefieren producir"
+    },
+    {
+      "iteration": 3,
+      "country": "Spain",
+      "company": "COSMEWAX",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 85,
+      "verdict": "t3",
+      "pattern": "cosmetics-pure-producer-slow-cycle",
+      "client_comment": "✅. Son productor de cosméticos, más allá de packaging, difícil que les pueda traer muchas soluciones a sus problemas actuales… serían un cliente que se demoraría. Podría ser cliente, pero no prioridad"
+    },
+    {
+      "iteration": 3,
+      "country": "Italy",
+      "company": "IL TELONE S.R.L.",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 77,
+      "verdict": "reject",
+      "pattern": "adjacent-category-mismatch",
+      "client_comment": "❌. Se ve como que su división de construcción, geomembranas y eso no es de las más importantes, por lo que si les vendiera, el volumen no sería muy considerable. Claude dice que sus productos no calzan con los míos y que a nivel commodity están lejos (en otras palabras, los volumenes no calzarían mucho)"
+    },
+    {
+      "iteration": 3,
+      "country": "Italy",
+      "company": "Harpo seic",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 62,
+      "verdict": "t3",
+      "pattern": "third-party-distributor-product-fit",
+      "client_comment": "✅. Product fit, pero no tienen private label y venden marcas de terceros. Habría que ver si se animarían a vender lo suyo. No son prioridad pero podría ser interesante"
+    },
+    {
+      "iteration": 3,
+      "country": "Italy",
+      "company": "Geomembrane Bresciani Srl",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 77,
+      "verdict": "reject",
+      "pattern": "dead-website",
+      "client_comment": "Me aparece como inexistente su página web"
+    },
+    {
+      "iteration": 3,
+      "country": "Italy",
+      "company": "NETTUNO Irrigation (VISA SpA Group)",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 67,
+      "verdict": "reject",
+      "pattern": "adjacent-category-mismatch",
+      "client_comment": "❌. Sólo agricultura pero no hay product fit. Venden en su mayoría motores"
+    },
+    {
+      "iteration": 3,
+      "country": "Italy",
+      "company": "Geo&Tex 2000 Spa",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 62,
+      "verdict": "reject",
+      "pattern": "pure-manufacturer-no-import",
+      "client_comment": "❌. Fábrica, muy enfocada en su producto. Estaría entrando a competirle"
+    },
+    {
+      "iteration": 3,
+      "country": "Germany",
+      "company": "Famobra Group",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 95,
+      "verdict": "reject",
+      "pattern": "no-own-brand-reseller",
+      "client_comment": "❌. Retailer. Vende marcas externas, no marcas propias"
+    },
+    {
+      "iteration": 3,
+      "country": "Germany",
+      "company": "Tok Food",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 50,
+      "verdict": "reject",
+      "pattern": "food-distributor-not-disposables",
+      "client_comment": "❌. Empresa de comida, no de disposables de foodservice"
+    },
+    {
+      "iteration": 3,
+      "country": "Germany",
+      "company": "BABGENCEL GmbH",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 82,
+      "verdict": "t1",
+      "pattern": "confirmed-good-fit",
+      "client_comment": "✅"
+    },
+    {
+      "iteration": 3,
+      "country": "Germany",
+      "company": "Leef Blattwerk",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 77,
+      "verdict": "t1",
+      "pattern": "confirmed-good-fit",
+      "client_comment": "✅. Muy buen fit"
+    },
+    {
+      "iteration": 3,
+      "country": "Germany",
+      "company": "Deppler and Brauchle GmbH",
+      "vertical": null,
+      "delivered_tier": "Tier 3",
+      "delivered_score": 37,
+      "verdict": "reject",
+      "pattern": "unclassified",
+      "client_comment": "❌. No entiendo qué son"
+    },
+    {
+      "iteration": 3,
+      "country": "Israel",
+      "company": "Sadovsky Industries Household Products",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 87,
+      "verdict": "reject",
+      "pattern": "pure-manufacturer-no-import",
+      "client_comment": "❌. Es fábrica, y para los productos que te pasé, por ahora no relevante. Pero sí vendemos algunos de los productos que ellos comercializan. Habría que ver si son relevantes para el área de limpieza"
+    },
+    {
+      "iteration": 3,
+      "country": "Israel",
+      "company": "EQUIP-AGRO LTD",
+      "vertical": null,
+      "delivered_tier": "Tier 2",
+      "delivered_score": 62,
+      "verdict": "t3",
+      "pattern": "claimed-import-without-evidence",
+      "client_comment": "✅. Se ve como de T2 o T3. No sé su tamaño y si será importador. A nivel producto buen fit"
+    },
+    {
+      "iteration": 3,
+      "country": "Israel",
+      "company": "Pelemix Ltd.",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 85,
+      "verdict": "reject",
+      "pattern": "adjacent-category-mismatch",
+      "client_comment": "❌. Fabricante de sustrato de coco. No relevante. Debe haber match con la palabra Agricultura."
+    },
+    {
+      "iteration": 3,
+      "country": "Israel",
+      "company": "Metzer",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 77,
+      "verdict": "reject",
+      "pattern": "pure-manufacturer-no-import",
+      "client_comment": "❌. Manufacturer, sin muchas pistas de ser importador de nada. Podría ofrecer complementos, pero waste of time"
+    },
+    {
+      "iteration": 3,
+      "country": "Israel",
+      "company": "A.A. Politiv",
+      "vertical": null,
+      "delivered_tier": "Tier 1",
+      "delivered_score": 77,
+      "verdict": "reject",
+      "pattern": "pure-manufacturer-no-import",
+      "client_comment": "❌. Manufacturer, sin muchas pistas de ser importador de nada. Podría ofrecer complementos, pero waste of time"
+    }
+  ]
+}

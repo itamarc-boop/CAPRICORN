@@ -1,0 +1,77 @@
+name: Discovery pipeline
+
+# Triggered two ways:
+#   1. repository_dispatch (event_type "discover") - fired by the webapp's Run
+#      button. client_payload carries { run_id, country, target }.
+#   2. workflow_dispatch - manual run from the GitHub Actions UI, for testing.
+on:
+  repository_dispatch:
+    types: [discover]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "pipeline_runs row id (optional; leave blank for an ad-hoc test run that won't report to a row)"
+        required: false
+        type: string
+      country:
+        description: "Country to discover leads in"
+        required: true
+        type: string
+      target:
+        description: "Target number of qualified leads"
+        required: false
+        default: "25"
+        type: string
+
+# Keep one run per pipeline_runs id from colliding on shared .tmp files.
+# Falls back to the GitHub run id when no run_id is supplied (manual test runs).
+concurrency:
+  group: discovery-${{ github.event.client_payload.run_id || github.event.inputs.run_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Resolve inputs
+        # Inputs arrive from EITHER repository_dispatch (client_payload) OR
+        # workflow_dispatch (inputs). Pick whichever is present, default target
+        # to 25, and write the resolved values to $GITHUB_ENV for the next step.
+        run: |
+          RUN_ID="${{ github.event.client_payload.run_id || github.event.inputs.run_id }}"
+          COUNTRY="${{ github.event.client_payload.country || github.event.inputs.country }}"
+          TARGET="${{ github.event.client_payload.target || github.event.inputs.target }}"
+          TARGET="${TARGET:-25}"
+          {
+            echo "RUN_ID=${RUN_ID}"
+            echo "COUNTRY=${COUNTRY}"
+            echo "TARGET=${TARGET}"
+          } >> "$GITHUB_ENV"
+          echo "Resolved -> run_id='${RUN_ID}' country='${COUNTRY}' target='${TARGET}'"
+
+      - name: Run pipeline
+        env:
+          EXPLORIUM_API_KEY: ${{ secrets.EXPLORIUM_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          DELIVERY_SHEET_EMAILS: ${{ secrets.DELIVERY_SHEET_EMAILS }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # RUN_ID may be empty for ad-hoc manual runs; the orchestrator still runs,
+        # it just can't report progress back to a pipeline_runs row.
+        run: python tools/run_pipeline.py --run-id "$RUN_ID" --country "$COUNTRY" --target "$TARGET"

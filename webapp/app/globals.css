@@ -1,0 +1,284 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────
+   Editorial-quiet palette. Warm ivory ground, deep navy for emphasis,
+   restrained badge accents that feel printed, not Tailwind-default.
+   ───────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand */
+  --navy:        #1F4E5F;
+  --navy-deep:   #0F2E3A;
+  --navy-soft:   #2D6478;
+
+  /* Surfaces */
+  --ground:      #F8F4EC;   /* warm ivory page */
+  --surface:     #FFFFFF;
+  --surface-2:   #FBF8F1;   /* faint warm tint for striped rows */
+
+  /* Lines */
+  --line-strong: #DDD4C0;
+  --line:        #ECE6D6;
+  --line-soft:   #F4EFE2;
+
+  /* Type — every step holds WCAG AA (>=4.5:1) on --ground and --surface.
+     --ink-4 is the micro-label floor; hierarchy below it comes from size
+     and case, never from going lighter. */
+  --ink:         #1B1D1C;
+  --ink-2:       #3A3A37;
+  --ink-3:       #6E6A60;
+  --ink-4:       #756F65;
+
+  /* Editorial accents — muted, printed feel (not Tailwind brights) */
+  --t1-ink:      #1F4E5F;   /* uses brand navy */
+  --t1-bg:       #E4ECEE;
+  --t2-ink:      #8C5A22;   /* burnt sienna */
+  --t2-bg:       #F2E7D6;
+  --t3-ink:      #5E5A50;
+  --t3-bg:       #ECE7DA;
+
+  --ok-ink:      #2E5E48;
+  --ok-bg:       #E1ECDF;
+  --warn-ink:    #7A5414;
+  --warn-bg:     #F2E7D2;
+  --info-ink:    #2A5266;
+  --info-bg:     #E2ECF1;
+  --muted-ink:   #6E6A60;
+  --muted-bg:    #ECE7DA;
+}
+
+/* Make tailwind's bg-white, text classes feel less harsh by default
+   without losing utility. We override only the layout-level surfaces. */
+html {
+  font-feature-settings: "ss01", "kern", "calt";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--ground);
+  color: var(--ink);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+/* Display headings — serif gives the dashboard editorial gravity. */
+.font-display {
+  font-family: var(--font-display), "Newsreader", Georgia, serif;
+  letter-spacing: -0.012em;
+  font-feature-settings: "ss01", "ss02", "kern", "calt";
+}
+
+/* Tabular figures for numbers in tables and metric cards. */
+.font-tabular {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Refined focus ring — navy-tinted, not the browser default blue. */
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--navy) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Inputs: warmer borders, refined hover/focus. */
+input, textarea, select {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+input:hover, textarea:hover, select:hover {
+  border-color: color-mix(in oklab, var(--navy) 35%, var(--line-strong));
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--navy) 12%, transparent);
+}
+::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+
+/* A whisper of a rule under a section heading — editorial touch. */
+.rule-soft {
+  border-top: 1px solid var(--line);
+}
+
+/* Card surfaces — soft shadow + warm border, never hard. */
+.card-soft {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow:
+    0 1px 0 0 rgba(31, 78, 95, 0.02),
+    0 1px 3px -1px rgba(31, 78, 95, 0.06),
+    0 4px 12px -8px rgba(31, 78, 95, 0.05);
+}
+
+/* Pill badges — printed feel, no gradients, ink-on-tinted-paper. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-feature-settings: "kern";
+}
+
+/* Primary CTA — deep navy. Hover lightens by a hair. */
+.btn-primary {
+  background: var(--navy);
+  color: #fff;
+  border-radius: 5px;
+  padding: 9px 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition: background 120ms ease, transform 80ms ease;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--navy-soft);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Secondary ghost button. */
+.btn-ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 8px 13px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: color-mix(in oklab, var(--navy) 30%, var(--line-strong));
+}
+
+/* Table niceties. */
+.tbl thead th {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  padding: 11px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.tbl tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+.tbl tbody tr:last-child td { border-bottom: none; }
+.tbl tbody tr {
+  transition: background 80ms ease;
+}
+.tbl tbody tr:hover {
+  background: color-mix(in oklab, var(--navy) 4%, var(--surface));
+}
+
+/* Subtle link affordance for in-row clickables. */
+.link-soft {
+  color: var(--navy-deep);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.link-soft:hover { text-decoration: underline; color: var(--navy); }
+
+/* ─────────────────────────────────────────────────────────────────
+   Phase 3 CRM shell — sidebar layout, top bar, global search.
+   Append-only section: do not fold these into rules above.
+   ───────────────────────────────────────────────────────────────── */
+
+/* Translucent ivory top bar over scrolling content. */
+.topbar-glass {
+  background: color-mix(in oklab, var(--ground) 88%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Keyboard-shortcut hint chip (e.g. ⌘K in the global search). */
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  pointer-events: none;
+}
+
+/* Micro-label — 10.5px uppercase section/field captions. */
+.micro-label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+/* Large tabular metric number for stat cards. */
+.stat-num {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Motion — state and feedback only, 150-250ms, ease-out.
+   Everything here collapses to instant under reduced motion.
+   ───────────────────────────────────────────────────────────────── */
+
+/* Entrance for dropdowns, popovers, transient notices. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise-in {
+  animation: rise-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Skeleton block for route-level loading states. */
+@keyframes skel-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.skel {
+  background: var(--line-soft);
+  border-radius: 4px;
+  animation: skel-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skel { animation: none; }
+}
