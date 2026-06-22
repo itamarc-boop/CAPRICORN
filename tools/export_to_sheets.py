@@ -132,6 +132,28 @@ def _grid(rows: List[Dict[str, Any]], columns: List[str]) -> List[List[str]]:
 # ─── Google auth + service clients ──────────────────────────────────────────
 
 def _credentials():
+    # OAuth user credentials (refresh token) take precedence. This is the path
+    # used when the org blocks service-account keys: a one-time browser consent
+    # (tools/get_google_oauth.py) yields a refresh token, stored as three repo
+    # secrets. Sheets are then created in the consenting user's own Drive.
+    rt = os.getenv("GOOGLE_OAUTH_REFRESH_TOKEN")
+    cid = os.getenv("GOOGLE_OAUTH_CLIENT_ID")
+    csec = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+    if rt and cid and csec:
+        try:
+            from google.oauth2.credentials import Credentials  # type: ignore
+        except ImportError:
+            raise RuntimeError(
+                "google-auth not installed. Run: pip install -r requirements.txt")
+        return Credentials(
+            token=None,
+            refresh_token=rt.strip(),
+            client_id=cid.strip(),
+            client_secret=csec.strip(),
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=SCOPES,
+        )
+
     try:
         from google.oauth2 import service_account  # type: ignore
     except ImportError:
@@ -154,8 +176,9 @@ def _credentials():
             path, scopes=SCOPES)
 
     raise RuntimeError(
-        "No service-account credentials found. Set GOOGLE_SERVICE_ACCOUNT_JSON "
-        "(raw JSON) or GOOGLE_APPLICATION_CREDENTIALS (path to a JSON file).")
+        "No Google credentials found. Set GOOGLE_OAUTH_REFRESH_TOKEN + "
+        "GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET (sign-in flow), or "
+        "GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_APPLICATION_CREDENTIALS (service account).")
 
 
 def _build_services(creds):
