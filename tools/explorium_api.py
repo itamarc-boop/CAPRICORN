@@ -148,7 +148,9 @@ class ExploriumClient:
         Returns the concatenated ``data`` list (each item carries a
         ``business_id``).
         """
-        page_size = max(1, min(page_size, 100))
+        size = max(1, size)
+        # Explorium rejects size < page_size; clamp for small targets.
+        page_size = max(1, min(page_size, 100, size))
         collected: List[Dict[str, Any]] = []
         page = 1
         total_pages: Optional[int] = None
@@ -201,7 +203,9 @@ class ExploriumClient:
         Returns the concatenated ``data`` list (each item carries
         prospect_id, full_name, job_title, business_id, country_name).
         """
-        page_size = max(1, min(page_size, 100))
+        size = max(1, size)
+        # Explorium rejects size < page_size; clamp for small batches.
+        page_size = max(1, min(page_size, 100, size))
         filters: Dict[str, Any] = {"business_id": {"values": list(business_ids)}}
         if job_levels:
             filters["job_level"] = {"values": job_levels}
