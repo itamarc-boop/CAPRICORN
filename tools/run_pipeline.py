@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from explorium_api import ExploriumClient, country_to_code  # noqa: E402
+from explorium_api import ExploriumClient, ExploriumError, country_to_code  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -361,11 +361,18 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
           f"fetching contacts for {len(qualified_ids)}")
     prospects_raw_path = work / "prospects_raw.json"
     if qualified_ids:
-        prospects = client.fetch_prospects(
-            qualified_ids, job_levels=PROSPECT_JOB_LEVELS,
-            job_departments=PROSPECT_JOB_DEPARTMENTS, size=1000)
-        # Fallback: if the seniority/department filters return nothing, retry
-        # unfiltered (SOP: European SMEs rarely tag a procurement department).
+        # job_level only — Explorium's job_department enum is narrow and
+        # rejects values like 'general_management'/'operations'. pick_prospects
+        # ranks by title regardless, so the department filter adds little.
+        try:
+            prospects = client.fetch_prospects(
+                qualified_ids, job_levels=PROSPECT_JOB_LEVELS, size=1000)
+        except ExploriumError as exc:
+            print(f"[prospects] filtered fetch rejected ({exc}); "
+                  "retrying with business_id only")
+            prospects = client.fetch_prospects(qualified_ids, size=1000)
+        # If the seniority filter returns nothing, retry unfiltered (SOP:
+        # European SMEs rarely tag seniority cleanly). pick_prospects ranks.
         if not prospects:
             print("[prospects] filtered fetch empty — retrying with "
                   "business_id only")
