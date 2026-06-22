@@ -76,6 +76,9 @@ jobs:
           # Optional service-account fallback (unset under the current org policy).
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           DELIVERY_SHEET_EMAILS: ${{ secrets.DELIVERY_SHEET_EMAILS }}
+          # When set, every run appends to this one spreadsheet instead of
+          # creating a new one. Clear the variable to go back to one-sheet-per-run.
+          MASTER_SHEET_ID: ${{ vars.MASTER_SHEET_ID }}
           GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         # RUN_ID may be empty for ad-hoc manual runs; the orchestrator still runs,
         # it just can't report progress back to a pipeline_runs row.

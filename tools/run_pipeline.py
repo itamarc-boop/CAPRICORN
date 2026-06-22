@@ -465,7 +465,8 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
                        if e.strip()]
     title = (f"Capricorn leads — {country_norm.title()} — "
              f"{qualified_count} leads")
-    sheet = export_leads_to_sheets(rows, title, delivery_emails or None)
+    sheet = export_leads_to_sheets(rows, title, delivery_emails or None,
+                                   spreadsheet_id=os.getenv("MASTER_SHEET_ID"))
     print(f"[sheet] {sheet.get('sheet_url')}")
 
     # rough Anthropic spend estimate (caps are the worst case)

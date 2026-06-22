@@ -283,8 +283,47 @@ def _share(drive, file_id: str, delivery_emails: List[str]) -> None:
         ).execute()
 
 
+def _append_values(sheets, spreadsheet_id: str, tab: str,
+                   rows: List[List[str]]) -> None:
+    if not rows:
+        return
+    sheets.spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id, range=f"'{tab}'!A1",
+        valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS",
+        body={"values": rows},
+    ).execute()
+
+
+def _try_append(sheets, spreadsheet_id: str,
+                rows: List[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+    """Append rows to an existing master spreadsheet (header kept, new rows
+    added below). Returns its url+id, or None if the id is stale/inaccessible
+    so the caller falls back to creating a fresh sheet."""
+    try:
+        meta = sheets.spreadsheets().get(
+            spreadsheetId=spreadsheet_id,
+            fields="spreadsheetId,spreadsheetUrl,sheets.properties.title"
+        ).execute()
+        tabs = {s["properties"]["title"] for s in meta.get("sheets", [])}
+        for tab, cols in (("Leads", LEADS_COLUMNS),
+                          ("Decision detail", DETAIL_COLUMNS)):
+            grid = _grid(rows, cols)
+            if tab in tabs:
+                _append_values(sheets, spreadsheet_id, tab, grid[1:])
+            else:
+                _write_values(sheets, spreadsheet_id, tab, grid)
+        url = meta.get("spreadsheetUrl") or (
+            f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit")
+        return {"sheet_url": url, "sheet_id": spreadsheet_id}
+    except Exception as exc:  # noqa: BLE001 — stale id -> create a fresh sheet
+        print(f"[sheets] could not append to master {spreadsheet_id} ({exc}); "
+              "creating a new spreadsheet instead", file=sys.stderr)
+        return None
+
+
 def export_leads_to_sheets(rows: List[Dict[str, Any]], title: str,
-                           delivery_emails: Optional[List[str]] = None
+                           delivery_emails: Optional[List[str]] = None,
+                           spreadsheet_id: Optional[str] = None
                            ) -> Dict[str, str]:
     """Build the two-tab deliverable spreadsheet and return its URL + id.
 
@@ -302,6 +341,13 @@ def export_leads_to_sheets(rows: List[Dict[str, Any]], title: str,
 
     creds = _credentials()
     sheets, drive = _build_services(creds)
+
+    # Append to the master spreadsheet when one is configured, so successive
+    # runs accumulate in a single sheet instead of creating a new one each time.
+    if spreadsheet_id and spreadsheet_id.strip():
+        appended = _try_append(sheets, spreadsheet_id.strip(), rows)
+        if appended:
+            return appended
 
     created = _create_spreadsheet(sheets, title)
     spreadsheet_id = created["spreadsheetId"]
@@ -357,7 +403,8 @@ def main() -> int:
 
     try:
         result = export_leads_to_sheets(
-            rows, args.title, _parse_delivery_emails())
+            rows, args.title, _parse_delivery_emails(),
+            spreadsheet_id=os.getenv("MASTER_SHEET_ID"))
     except Exception as exc:  # noqa: BLE001 — surface any failure as JSON on stderr
         print(json.dumps({"error": str(exc)}), file=sys.stderr)
         return 1
