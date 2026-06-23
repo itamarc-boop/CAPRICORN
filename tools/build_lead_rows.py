@@ -110,7 +110,7 @@ def _company_base(item: Dict[str, Any], score: Dict[str, Any]) -> Dict[str, Any]
         "linkedin_company_page": item.get("linkedin_url"),
         "description": item.get("description"),
         "icp_tier": score.get("tier"),
-        "icp_score": score.get("total_score"),
+        "icp_score": score.get("display_score", score.get("total_score")),
         "business_model": evidence.get("business_model") or "unknown",
         "import_evidence": _evidence_summary(imports),
         "own_brand_evidence": own_brand_text,

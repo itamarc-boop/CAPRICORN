@@ -354,8 +354,10 @@ def apply_t1_backstop(candidate: Dict[str, Any]) -> bool:
 def judge_all(candidates: List[Dict[str, Any]], *, model: str,
               budget_usd: float, only_names: Optional[set] = None,
               limit: Optional[int] = None,
-              few_shot_seed: int = 7) -> List[Dict[str, Any]]:
+              few_shot_seed: int = 7,
+              workers: int = 6) -> List[Dict[str, Any]]:
     from anthropic import Anthropic
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     load_dotenv(ROOT / ".env")
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY not set (add to .env).")
@@ -364,21 +366,28 @@ def judge_all(candidates: List[Dict[str, Any]], *, model: str,
     examples = sample_examples(playbook, seed=few_shot_seed)
     system_prompt = build_system_prompt(playbook, examples)
 
-    cumulative_cost = 0.0
-    done = 0
+    # Already-gated-out candidates cost no LLM call — reject them inline, then
+    # judge the rest CONCURRENTLY (Sonnet per company; modest pool to stay under
+    # rate limits — the SDK retries 429s automatically).
+    work = []
     for cand in candidates:
         name = cand.get("name", "(unnamed)")
         if only_names and name not in only_names:
             continue
         score = cand.get("score") or {}
         if not score.get("gate_passed"):
-            # Don't burn LLM cost on already-gated-out candidates.
             cand["bdr_judgment"] = {"verdict": "reject", "matched_pattern": "none",
                                     "reason": "Gated out before LLM judgment.",
                                     "deal_probability": 0.0,
                                     "what_to_sell": [],
                                     "flags": ["deterministic-gate-drop"]}
             continue
+        work.append(cand)
+        if limit and len(work) >= limit:
+            break
+
+    def _judge(cand: Dict[str, Any]) -> float:
+        name = cand.get("name", "(unnamed)")
         try:
             judgment, cost = judge_one(client, model, system_prompt, cand)
         except Exception as e:  # noqa: BLE001 — surface and continue
@@ -388,23 +397,23 @@ def judge_all(candidates: List[Dict[str, Any]], *, model: str,
                                     "reason": f"judge call failed: {e}",
                                     "deal_probability": None,
                                     "what_to_sell": [], "flags": ["judge-error"]}
-            continue
+            return 0.0
         cand["bdr_judgment"] = judgment
         downgraded = apply_t1_backstop(cand)
-        cumulative_cost += cost
-        done += 1
         print(f"  [judge] {name:42}  {judgment.get('verdict'):>6}  "
               f"({judgment.get('matched_pattern')})"
-              f"{'  [t1 backstop]' if downgraded else ''}  ${cumulative_cost:.4f}",
+              f"{'  [t1 backstop]' if downgraded else ''}  ${cost:.4f}",
               file=sys.stderr)
-        if cumulative_cost > budget_usd:
-            raise RuntimeError(
-                f"BDR judge hit cost cap (${cumulative_cost:.4f} > "
-                f"${budget_usd:.2f}) after {done} candidates. Bumping the budget? "
-                f"Re-run with --budget HIGHER or set BDR_JUDGE_USD_BUDGET.")
-        if limit and done >= limit:
-            break
-        time.sleep(0.1)   # be polite
+        return cost
+
+    cumulative_cost = 0.0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_judge, cand) for cand in work]
+        for fut in as_completed(futures):
+            cumulative_cost += fut.result()
+    if cumulative_cost > budget_usd:
+        print(f"  [judge] WARNING: spend ${cumulative_cost:.4f} exceeded budget "
+              f"${budget_usd:.2f} (batch judged concurrently).", file=sys.stderr)
     return candidates
 
 

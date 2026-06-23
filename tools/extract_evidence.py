@@ -300,15 +300,18 @@ def extract_one(client: Any, model: str, record: Dict[str, Any]) -> tuple[Dict[s
 
 def extract_all(records: List[Dict[str, Any]], *, model: str, budget_usd: float,
                 only_names: Optional[set] = None,
-                limit: Optional[int] = None) -> List[Dict[str, Any]]:
+                limit: Optional[int] = None,
+                workers: int = 8) -> List[Dict[str, Any]]:
     from anthropic import Anthropic
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     load_dotenv(ROOT / ".env")
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY not set (add to .env).")
     client = Anthropic()
 
-    cumulative = 0.0
-    done = 0
+    # Dead sites cost no API call — resolve them inline, then extract the rest
+    # CONCURRENTLY (Haiku per company; the Anthropic client is thread-safe).
+    work = []
     for rec in records:
         name = rec.get("name", "(unnamed)")
         if only_names and name not in only_names:
@@ -316,40 +319,46 @@ def extract_all(records: List[Dict[str, Any]], *, model: str, budget_usd: float,
         research = rec.get("website_research") or {}
         status = research.get("site_status") or (
             "ok" if research.get("ok") else "unreachable")
-
         if status == "dead":
             rec["evidence"] = empty_evidence(
                 "dead", "site dead — skipped LLM extraction")
             print(f"  [evidence] {name:42} dead site, skipped", file=sys.stderr)
             continue
+        work.append((rec, status))
+        if limit and len(work) >= limit:
+            break
 
+    def _extract(rec: Dict[str, Any], status: str) -> float:
+        name = rec.get("name", "(unnamed)")
         try:
             ev, cost = extract_one(client, model, rec)
         except Exception as e:  # noqa: BLE001
             print(f"  [evidence] {name}: ERROR {e}", file=sys.stderr)
             rec["evidence"] = empty_evidence(status, f"extraction failed: {e}")
             rec["evidence"]["extraction_error"] = True
-            continue
+            return 0.0
         ev["site_status"] = status
         if status != "ok":
             ev.setdefault("extraction_notes", []).append(
                 "site unreachable — extracted from Explorium description only")
         validate_evidence(ev)
         rec["evidence"] = ev
-        cumulative += cost
-        done += 1
         print(f"  [evidence] {name:42} model={ev.get('business_model'):28} "
-              f"imports={ev['imports']['verdict']:8} own_brand={ev['own_brand']['verdict']:8} "
-              f"fit={ev['catalog_fit']['verdict']:9} ${cumulative:.4f}",
+              f"imports={ev['imports']['verdict']:8} "
+              f"own_brand={ev['own_brand']['verdict']:8} "
+              f"fit={ev['catalog_fit']['verdict']:9} ${cost:.4f}",
               file=sys.stderr)
-        if cumulative > budget_usd:
-            raise RuntimeError(
-                f"Evidence extraction hit cost cap (${cumulative:.4f} > "
-                f"${budget_usd:.2f}) after {done} companies. "
-                f"Re-run with --budget HIGHER or set EVIDENCE_EXTRACT_USD_BUDGET.")
-        if limit and done >= limit:
-            break
-        time.sleep(0.05)
+        return cost
+
+    cumulative = 0.0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_extract, rec, status) for rec, status in work]
+        for fut in as_completed(futures):
+            cumulative += fut.result()
+    if cumulative > budget_usd:
+        print(f"  [evidence] WARNING: spend ${cumulative:.4f} exceeded budget "
+              f"${budget_usd:.2f} (batch already extracted concurrently).",
+              file=sys.stderr)
     return records
 
 

@@ -62,9 +62,9 @@ import requests
 
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36")
-TIMEOUT = 12
-MAX_PAGES = 7
-MAX_ATTEMPTS = 16
+TIMEOUT = 8                   # was 12 — dead/slow sites were the dominant cost
+MAX_PAGES = 5                 # was 7 — homepage + common paths carry the signal
+MAX_ATTEMPTS = 10             # was 16
 PAGE_TEXT_CAP = 6000          # chars kept per page for the LLM extractor
 BATCH_FAIL_THRESHOLD = 0.25   # batch mode exits non-zero above this failure rate
 
@@ -387,7 +387,7 @@ def research_record(record: Dict[str, object]) -> Dict[str, object]:
 
 
 def research_records(records: List[Dict[str, object]],
-                     workers: int = 8) -> Dict[str, int]:
+                     workers: int = 12) -> Dict[str, int]:
     """Research all records in place; return a status summary."""
     with ThreadPoolExecutor(max_workers=workers) as pool:
         list(pool.map(research_record, records))
@@ -421,7 +421,7 @@ def _main() -> int:
     parser.add_argument("--records", help="JSON list of pipeline records "
                         "(each with 'website' and optional 'description')")
     parser.add_argument("--out", help="output path for the researched records")
-    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--workers", type=int, default=12)
     args = parser.parse_args()
 
     if args.records:

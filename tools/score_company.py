@@ -119,6 +119,27 @@ TIER_1_MIN = 70
 TIER_2_MIN = 45
 TIER_3_MIN = 25
 
+# Display bands per tier. The raw 0-100 sum (total_score) is frozen BEFORE the
+# evidence caps + BDR-judge override can lower the tier, so a high-scoring
+# company can land in a lower tier (e.g. a manufacturer scoring 97 on evidence
+# that the judge correctly downgrades to Tier 3). Showing 97 next to "Tier 3" on
+# a client row looks broken, so the DISPLAYED score is clamped into the final
+# tier's band. The true sum stays in total_score for internal sort/audit.
+_TIER_BANDS = {
+    "Tier 1": (TIER_1_MIN, 100),
+    "Tier 2": (TIER_2_MIN, TIER_1_MIN - 1),
+    "Tier 3": (TIER_3_MIN, TIER_2_MIN - 1),
+}
+
+
+def _display_score(total, tier):
+    """Clamp the raw score into the final tier's band so they never contradict."""
+    band = _TIER_BANDS.get(tier or "")
+    if not band:
+        return total
+    lo, hi = band
+    return min(max(total, lo), hi)
+
 _MILLION = 1_000_000
 
 # Iteration-1-feedback-driven negative keywords (loaded from the labels file so
@@ -486,7 +507,8 @@ def score_company(company: Dict[str, Any]) -> Dict[str, Any]:
             "name": name, "gate_passed": False,
             "drop_reasons": drop_reasons, "flags": flags,
             "criterion_scores": scores, "criterion_detail": detail,
-            "total_score": total, "tier": None, "qualified": False,
+            "total_score": total, "display_score": total,
+            "tier": None, "qualified": False,
             "country": country, "country_priority": priority,
             "deterministic_tier": deterministic_tier,
         }
@@ -495,7 +517,8 @@ def score_company(company: Dict[str, Any]) -> Dict[str, Any]:
         "name": name, "gate_passed": True,
         "drop_reasons": [], "flags": flags,
         "criterion_scores": scores, "criterion_detail": detail,
-        "total_score": total, "tier": final_tier,
+        "total_score": total, "display_score": _display_score(total, final_tier),
+        "tier": final_tier,
         "qualified": final_tier is not None,
         "country": country, "country_priority": priority,
         "deterministic_tier": deterministic_tier,
