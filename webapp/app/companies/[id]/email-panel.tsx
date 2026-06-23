@@ -64,7 +64,10 @@ export default function EmailPanel({
     contacts[0] ??
     null;
   const [contactId, setContactId] = useState<string>(defaultContact?.id ?? '');
-  const [templateId, setTemplateId] = useState<string>('');
+  // Default to the first template (not Blank) so "Write with AI" is usable
+  // immediately and the body starts from a real draft. Switch to Blank to compose
+  // from scratch.
+  const [templateId, setTemplateId] = useState<string>(templates[0]?.id ?? '');
   const [language, setLanguage] = useState<string>('en');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -391,6 +394,15 @@ export default function EmailPanel({
           {templates.length === 0 && (
             <p className="text-[11.5px]" style={{ color: 'var(--ink-4)' }}>
               No templates yet: <Link href="/templates" className="link-soft">create one</Link> to reuse copy or write with AI.
+            </p>
+          )}
+          {templates.length > 0 && !canAI && busy === null && (
+            <p className="text-[11.5px]" style={{ color: 'var(--ink-4)' }}>
+              {!selectedContact?.email
+                ? 'Add an email to the selected contact to write with AI.'
+                : !templateId
+                  ? 'Pick a template to write with AI.'
+                  : ''}
             </p>
           )}
         </div>
