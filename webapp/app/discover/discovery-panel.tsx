@@ -1,11 +1,15 @@
 'use client';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
 import {
+  RUN_STATUS_LABELS,
   RUN_STATUS_STYLES,
   titleCase,
   type PipelineRun,
 } from '@/lib/db/types';
+import { COUNTRY_NAMES, isSupportedCountry } from '@/lib/countries';
+import type { AppRole } from '@/lib/auth/allowlist';
 
 const MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -30,6 +34,18 @@ function estimateDollars(target: number): string {
   return (target * 0.04).toFixed(2);
 }
 
+/** Map a raw worker error to plain language for the client. */
+function friendlyRunError(raw: string | null): string {
+  const e = (raw || '').toLowerCase();
+  if (e.includes('not recognized') || e.includes('not supported'))
+    return "That country isn't supported yet. Try another market.";
+  if (e.includes('422') || e.includes('explorium'))
+    return "We couldn't pull companies for that market this time. Try again, or pick another country.";
+  if (e.includes('pre-ship audit') || e.includes('refusing to ship'))
+    return "This run didn't meet our quality bar, so nothing was delivered. Try again, or pick another market.";
+  return 'Something went wrong with this run. Try again.';
+}
+
 const TARGET_MIN = 5;
 const TARGET_MAX = 60;
 const TARGET_STEP = 5;
@@ -37,7 +53,14 @@ const TARGET_DEFAULT = 25;
 
 type Notice = { kind: 'ok' | 'warn'; message: string };
 
-export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineRun[] }) {
+export default function DiscoveryPanel({
+  initialRuns,
+  role,
+}: {
+  initialRuns: PipelineRun[];
+  role: AppRole;
+}) {
+  const isAdmin = role === 'admin';
   const [runs, setRuns] = useState<PipelineRun[]>(initialRuns);
 
   // Form state
@@ -77,7 +100,8 @@ export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineR
   const dollars = useMemo(() => estimateDollars(target), [target]);
 
   const countryTrimmed = country.trim();
-  const canRun = countryTrimmed.length > 0;
+  const countryValid = isSupportedCountry(countryTrimmed);
+  const canRun = countryTrimmed.length > 0 && countryValid;
 
   function openConfirm() {
     if (!canRun) return;
@@ -104,6 +128,8 @@ export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineR
         if (data.error === 'github_not_configured') {
           message =
             "The discovery worker isn't connected yet. Ask your admin to finish setup.";
+        } else if (data.error === 'unsupported_country') {
+          message = "That country isn't supported yet. Pick one from the list.";
         } else if (data.error === 'trigger_failed') {
           message = 'Could not start the worker, try again.';
         } else if (data.error) {
@@ -149,12 +175,18 @@ export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineR
                 onChange={(e) => setCountry(e.target.value)}
                 placeholder="e.g. Portugal"
                 autoComplete="off"
+                list="discover-country-options"
                 className="w-full rounded px-2.5 py-1.5 text-[13px] border"
                 style={{ borderColor: 'var(--line-strong)', background: 'var(--surface)' }}
               />
+              <datalist id="discover-country-options">
+                {COUNTRY_NAMES.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
             </div>
             <div>
-              <FieldLabel htmlFor="discover-target">Target leads</FieldLabel>
+              <FieldLabel htmlFor="discover-target">Aim for</FieldLabel>
               <input
                 id="discover-target"
                 type="number"
@@ -184,15 +216,30 @@ export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineR
           </div>
         </form>
 
-        <p className="mt-3 text-[12px]" style={{ color: 'var(--ink-3)' }}>
-          <span className="micro-label">Rough estimate</span>{' '}
-          <span className="ml-1">
-            Roughly{' '}
-            <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>{credits}</span>{' '}
-            Explorium credits and about{' '}
-            <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>${dollars}</span>{' '}
-            of AI per run
-          </span>
+        {countryTrimmed.length > 0 && !countryValid && (
+          <p className="mt-2 text-[11.5px]" style={{ color: 'var(--warn-ink)' }}>
+            That country isn&rsquo;t supported yet — pick one from the list.
+          </p>
+        )}
+
+        {/* Cost detail is the operator's mental model — admins only. */}
+        {isAdmin && (
+          <p className="mt-3 text-[12px]" style={{ color: 'var(--ink-3)' }}>
+            <span className="micro-label">Rough estimate</span>{' '}
+            <span className="ml-1">
+              Roughly{' '}
+              <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>{credits}</span>{' '}
+              Explorium credits and about{' '}
+              <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>${dollars}</span>{' '}
+              of AI per run
+            </span>
+          </p>
+        )}
+
+        {/* Yield expectations — sets the 'often fewer than your aim' expectation. */}
+        <p className="mt-3 text-[12px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+          We discover many companies and deliver only the ones that truly fit, so the
+          number delivered is often smaller than your aim — especially in new markets.
         </p>
 
         {notice && (
@@ -220,7 +267,7 @@ export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineR
       ) : (
         <div className="space-y-3">
           {runs.map((run) => (
-            <RunCard key={run.id} run={run} />
+            <RunCard key={run.id} run={run} isAdmin={isAdmin} />
           ))}
         </div>
       )}
@@ -241,15 +288,23 @@ export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineR
               </span>
               .
             </p>
-            <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-              Roughly{' '}
-              <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>{credits}</span>{' '}
-              Explorium credits and about{' '}
-              <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>${dollars}</span>{' '}
-              of AI per run.
-            </p>
+            {isAdmin ? (
+              <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+                Roughly{' '}
+                <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>{credits}</span>{' '}
+                Explorium credits and about{' '}
+                <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>${dollars}</span>{' '}
+                of AI per run.
+              </p>
+            ) : (
+              <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+                This takes a few minutes. You can keep working while it runs.
+              </p>
+            )}
             <p className="mt-2 text-[12px]" style={{ color: 'var(--warn-ink)' }}>
-              This spends real Explorium credits and AI budget.
+              {isAdmin
+                ? 'This spends real Explorium credits and AI budget.'
+                : 'This starts a real discovery run.'}
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
@@ -276,9 +331,10 @@ export default function DiscoveryPanel({ initialRuns }: { initialRuns: PipelineR
   );
 }
 
-function RunCard({ run }: { run: PipelineRun }) {
+function RunCard({ run, isAdmin }: { run: PipelineRun; isAdmin: boolean }) {
   const pill = RUN_STATUS_STYLES[run.status];
   const active = run.status === 'queued' || run.status === 'running';
+  const reviewCount = run.qualified_count ?? run.leads_delivered ?? 0;
 
   return (
     <div className="card-soft p-4">
@@ -290,9 +346,10 @@ function RunCard({ run }: { run: PipelineRun }) {
           {titleCase(run.country)}
         </span>
         <span className="pill" style={{ color: pill.ink, background: pill.bg }}>
-          {run.status}
+          {RUN_STATUS_LABELS[run.status]}
         </span>
-        {run.status === 'running' && run.stage && (
+        {/* Raw stage strings are operator detail — admins only. */}
+        {isAdmin && run.status === 'running' && run.stage && (
           <span className="text-[12px]" style={{ color: 'var(--ink-3)' }}>
             {run.stage}
           </span>
@@ -310,9 +367,9 @@ function RunCard({ run }: { run: PipelineRun }) {
         run.qualified_count != null ||
         run.leads_delivered != null) && (
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
-          <Count label="Discovered" value={run.discovered_count} />
-          <Count label="Qualified" value={run.qualified_count} />
-          <Count label="Delivered" value={run.leads_delivered} />
+          {isAdmin && <Count label="Discovered" value={run.discovered_count} />}
+          <Count label="Companies" value={run.qualified_count} />
+          <Count label="Contacts" value={run.leads_delivered} />
         </div>
       )}
 
@@ -333,24 +390,52 @@ function RunCard({ run }: { run: PipelineRun }) {
         </div>
       )}
 
-      {/* Success: open the sheet */}
-      {run.status === 'succeeded' && run.sheet_url && (
-        <div className="mt-3">
-          <a
-            href={run.sheet_url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-primary text-[13px] inline-block"
-          >
-            Open Google Sheet ↗
-          </a>
+      {/* Success: review the new companies in the CRM and/or open the sheet. */}
+      {run.status === 'succeeded' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {run.crm_synced === true && run.batch_label && (
+            <Link
+              href={`/companies?batch=${encodeURIComponent(run.batch_label)}`}
+              className="btn-primary text-[13px] inline-block"
+            >
+              Review {reviewCount} new {reviewCount === 1 ? 'company' : 'companies'}
+            </Link>
+          )}
+          {run.sheet_url && (
+            <a
+              href={run.sheet_url}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-ghost text-[13px] inline-block"
+            >
+              Open Sheet ↗
+            </a>
+          )}
         </div>
       )}
 
-      {/* Failure */}
-      {run.status === 'failed' && run.error && (
+      {/* Sync failed — leads went to the sheet but not the pipeline. */}
+      {run.status === 'succeeded' && run.crm_synced === false && (
+        <div className="mt-2 text-[12px]" style={{ color: 'var(--warn-ink)' }}>
+          These leads were delivered to the sheet but couldn&rsquo;t be added to your
+          pipeline automatically. Open the sheet, or run it again.
+        </div>
+      )}
+
+      {/* Failure — friendly for clients, raw detail for admins. */}
+      {run.status === 'failed' && (
         <div className="mt-3 text-[12.5px]" style={{ color: 'var(--warn-ink)' }}>
-          {run.error}
+          {friendlyRunError(run.error)}
+          {isAdmin && run.error && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-[11.5px]" style={{ color: 'var(--ink-4)' }}>
+                Details
+              </summary>
+              <pre className="mt-1 whitespace-pre-wrap text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                {run.error}
+              </pre>
+            </details>
+          )}
         </div>
       )}
     </div>

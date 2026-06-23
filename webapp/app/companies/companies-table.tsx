@@ -47,12 +47,13 @@ export default function CompaniesTable({
 }: {
   initialCompanies: CompanyRow[];
   templates: TemplateOption[];
-  initialFilters: { country: string; tier: string; status: string };
+  initialFilters: { country: string; tier: string; status: string; batch: string };
 }) {
   const [companies, setCompanies] = useState<CompanyRow[]>(initialCompanies);
   const [filterCountry, setFilterCountry] = useState<string>(initialFilters.country);
   const [filterTier, setFilterTier] = useState<string>(initialFilters.tier);
   const [filterStatus, setFilterStatus] = useState<string>(initialFilters.status);
+  const filterBatch = initialFilters.batch;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -83,7 +84,8 @@ export default function CompaniesTable({
     (!filterCountry ||
       (filterCountry === '__unknown__' ? !c.country : c.country === filterCountry)) &&
     (!filterTier || c.icp_tier === filterTier) &&
-    (!filterStatus || c.status === filterStatus)
+    (!filterStatus || c.status === filterStatus) &&
+    (!filterBatch || c.batch_label === filterBatch)
   );
 
   const selectedFilteredCount = filtered.filter(c => selectedIds.has(c.id)).length;
@@ -131,6 +133,18 @@ export default function CompaniesTable({
                       options={TIERS.map(t => ({ v: t, l: t }))} />
         <FilterSelect value={filterStatus} onChange={setFilterStatus} all="All statuses"
                       options={COMPANY_STATUSES.map(s => ({ v: s, l: COMPANY_STATUS_LABELS[s] }))} />
+        {filterBatch && (
+          <span
+            className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[12px]"
+            style={{ background: 'var(--info-bg)', color: 'var(--info-ink)' }}
+          >
+            <span className="micro-label" style={{ color: 'var(--info-ink)' }}>Batch</span>
+            <span className="font-tabular">{filterBatch.replace(/^discovery_/, '')}</span>
+            <Link href="/companies" aria-label="Clear batch filter" style={{ color: 'var(--info-ink)' }}>
+              ✕
+            </Link>
+          </span>
+        )}
         <div className="ml-auto font-tabular" style={{ color: 'var(--ink-3)' }}>
           {selectedIds.size > 0 ? `${selectedIds.size} selected · ` : ''}{filtered.length} shown
         </div>
@@ -244,6 +258,17 @@ export default function CompaniesTable({
                 </tr>
               );
             })}
+            {filtered.length === 0 && (
+              <tr>
+                <td
+                  colSpan={9}
+                  className="text-center py-10 text-[13px] italic"
+                  style={{ color: 'var(--ink-4)' }}
+                >
+                  No companies match the current filters.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

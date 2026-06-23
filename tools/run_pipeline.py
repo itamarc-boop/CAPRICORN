@@ -14,9 +14,11 @@ concurrent runs never collide. Progress + the final outcome are reported to the
 ``pipeline_runs`` Supabase table (by ``id``) when ``--run-id`` is given and
 Supabase credentials are present; reporting failures never crash the run.
 
-Delivery is the Google Sheet ONLY. By product decision this worker does NOT sync
-into the companies/contacts CRM tables (that is the webapp's job) — it just
-reports the run row and ships the sheet.
+Delivery is twofold: the Google Sheet (for QA / sharing) AND a sync of the
+qualified leads into the companies/contacts CRM tables, so discovered leads show
+up in the webapp immediately and the client can act on them without the operator.
+The CRM sync is NON-BLOCKING — a sync failure never fails an otherwise-good run
+(the sheet is already delivered); it just records crm_synced=False on the run row.
 
 NOTE: every Explorium fetch/enrich call and every Anthropic call here spends
 real credits/USD. Budgets are scaled to --target and capped per env var.
@@ -26,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import traceback
@@ -115,6 +118,16 @@ MAX_ENRICH = 250
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _slug(s: str) -> str:
+    """lowercase, non-alphanumeric -> '-', collapse + trim dashes.
+
+    MUST stay in sync with slug() in
+    webapp/app/api/discovery/run/route.ts, so the batch_label computed here
+    matches the one the webapp already wrote to the pipeline_runs row (and the
+    one the Discover success CTA links to: /companies?batch=<batch_label>)."""
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
 
 
 class RunReporter:
@@ -225,7 +238,11 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     country_norm = country.strip()
     is_israel = code == "il"
     is_uk = code == "gb"
-    print(f"Country '{country_norm}' -> {code}  (target {target} qualified)")
+    # Tag every synced company with this run's batch so the webapp can filter
+    # /companies?batch=<batch_label>. Mirrors route.ts's row insert exactly.
+    batch_label = "discovery_" + _slug(country_norm)
+    print(f"Country '{country_norm}' -> {code}  (target {target} qualified, "
+          f"batch_label={batch_label})")
 
     # Extend the locked target-country gate for this geography only; the locked 8
     # are unaffected. score_company reads this at IMPORT time, so it must be set
@@ -468,6 +485,24 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     sheet = export_leads_to_sheets(rows, title, delivery_emails or None,
                                    spreadsheet_id=os.getenv("MASTER_SHEET_ID"))
     print(f"[sheet] {sheet.get('sheet_url')}")
+
+    # --- 17.5 add the qualified leads to the CRM (companies/contacts) --------
+    # Non-blocking by design: a sync failure must never fail an otherwise-good
+    # run (the sheet is already delivered). We record the outcome on the run row
+    # so the UI can show "couldn't add to CRM — retry" instead of a false green.
+    # sync() reuses the leads JSON already written to disk at step 16; it upserts
+    # firmographics only and never touches client-controlled status/notes.
+    reporter.update(stage="adding to CRM")
+    try:
+        from sync_leads_to_supabase import sync as sync_to_crm  # noqa: E402
+        sync_to_crm(leads_json, None, batch_label, False)
+        reporter.update(crm_synced=True)
+        print(f"[crm] synced {leads_delivered} leads under "
+              f"batch_label={batch_label}")
+    except Exception as exc:  # noqa: BLE001 — sheet still delivered
+        traceback.print_exc()
+        reporter.update(crm_synced=False)
+        print(f"[crm] sync failed (sheet still delivered): {exc}")
 
     # rough Anthropic spend estimate (caps are the worst case)
     anthropic_usd = round(

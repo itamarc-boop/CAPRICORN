@@ -4,6 +4,8 @@ import { getCurrentAppUser } from '@/lib/auth/allowlist';
 import { displaySerif, bodySans, tabularMono } from './fonts';
 import { SideNav, MobileNav } from './side-nav';
 import GlobalSearch from './global-search';
+import TopbarActions from './topbar-actions';
+import RunWatcher from './run-watcher';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -66,13 +68,19 @@ export default async function RootLayout({
             {/* Content column. */}
             <div className="lg:pl-[230px]">
               <header className="topbar-glass sticky top-0 z-40">
-                <div className="flex items-center gap-4 px-6 py-2.5">
-                  <GlobalSearch />
+                <div className="flex items-center gap-3 px-6 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <GlobalSearch />
+                  </div>
+                  <div className="shrink-0">
+                    <TopbarActions />
+                  </div>
                 </div>
                 <div className="px-6 pb-2 lg:hidden">
                   <MobileNav />
                 </div>
               </header>
+              <RunWatcher />
               <main className="mx-auto max-w-[1200px] px-6 py-6">
                 {children}
               </main>

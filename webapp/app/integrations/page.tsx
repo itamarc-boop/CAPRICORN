@@ -3,6 +3,23 @@ import { getServerSupabase } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** Deterministic "Jun 11, 2026, 14:05" sliced from the ISO string as UTC, so
+ *  there's no SSR/client locale drift (unlike toLocaleString). */
+function fmtDateTimeUTC(iso: string | null): string {
+  if (!iso) return '';
+  const year = iso.slice(0, 4);
+  const mi = parseInt(iso.slice(5, 7), 10) - 1;
+  const day = parseInt(iso.slice(8, 10), 10);
+  const hh = iso.slice(11, 13);
+  const mm = iso.slice(14, 16);
+  return `${MONTHS[mi] ?? ''} ${day}, ${year}, ${hh}:${mm} UTC`;
+}
+
 type SearchParams = { status?: string; detail?: string };
 
 export default async function IntegrationsPage({
@@ -79,8 +96,8 @@ export default async function IntegrationsPage({
                   {i.account_email}
                 </div>
                 <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-                  Connected {new Date(i.created_at).toLocaleString()}
-                  {i.last_used_at && ` · last used ${new Date(i.last_used_at).toLocaleString()}`}
+                  Connected {fmtDateTimeUTC(i.created_at)}
+                  {i.last_used_at && ` · last used ${fmtDateTimeUTC(i.last_used_at)}`}
                 </div>
               </div>
             ))}

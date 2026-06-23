@@ -1,7 +1,9 @@
 'use client';
 
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { getBrowserSupabase } from '@/lib/supabase/browser';
 
 /**
  * Primary navigation, shared between the desktop sidebar (SideNav) and the
@@ -97,9 +99,80 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * Count of discovery runs that finished (succeeded) since the user last opened
+ * Discover. Persists the "seen" timestamp in localStorage; clears on visiting
+ * /discover. Returns null when nothing new, so the caller renders no badge.
+ */
+function useDiscoverBadge(): number {
+  const pathname = usePathname();
+  const [count, setCount] = useState(0);
+
+  const scan = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    let seen = localStorage.getItem('discover_seen_at');
+    if (!seen) {
+      // First load: start the clock now so historical runs don't show a badge.
+      seen = new Date().toISOString();
+      localStorage.setItem('discover_seen_at', seen);
+    }
+    const supabase = getBrowserSupabase();
+    const { data } = await supabase
+      .from('pipeline_runs')
+      .select('id, finished_at, status')
+      .eq('status', 'succeeded')
+      .order('finished_at', { ascending: false })
+      .limit(50);
+    const n = (data ?? []).filter(
+      (r) => r.finished_at && (!seen || (r.finished_at as string) > seen)
+    ).length;
+    setCount(n);
+  }, []);
+
+  // Visiting Discover marks everything seen.
+  useEffect(() => {
+    if (pathname === '/discover' && typeof window !== 'undefined') {
+      localStorage.setItem('discover_seen_at', new Date().toISOString());
+      setCount(0);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    void scan();
+  }, [scan]);
+
+  useEffect(() => {
+    const supabase = getBrowserSupabase();
+    const channel = supabase
+      .channel('discover-badge')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_runs' }, () => {
+        void scan();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [scan]);
+
+  return pathname === '/discover' ? 0 : count;
+}
+
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="ml-auto rounded-full px-1.5 py-0.5 font-tabular text-[10px] leading-none"
+      style={{ background: 'var(--t2-bg)', color: 'var(--t2-ink)' }}
+    >
+      {count}
+    </span>
+  );
+}
+
 /** Vertical nav list for the fixed navy sidebar (desktop). */
 export function SideNav() {
   const pathname = usePathname();
+  const discoverBadge = useDiscoverBadge();
   return (
     <nav className="flex flex-col gap-0.5 px-3" aria-label="Primary">
       {NAV_ITEMS.map((item) => {
@@ -126,6 +199,7 @@ export function SideNav() {
               {item.icon}
             </span>
             {item.label}
+            {item.href === '/discover' && <NavBadge count={discoverBadge} />}
           </Link>
         );
       })}
@@ -136,6 +210,7 @@ export function SideNav() {
 /** Horizontal scrolling nav strip for the top bar on small screens. */
 export function MobileNav() {
   const pathname = usePathname();
+  const discoverBadge = useDiscoverBadge();
   return (
     <nav
       className="flex items-center gap-1 overflow-x-auto"
@@ -148,7 +223,7 @@ export function MobileNav() {
             key={item.href}
             href={item.href}
             aria-current={active ? 'page' : undefined}
-            className={`whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] transition-colors ${
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] transition-colors ${
               active ? '' : 'text-[color:var(--ink-3)] hover:text-[color:var(--ink)]'
             }`}
             style={
@@ -158,6 +233,14 @@ export function MobileNav() {
             }
           >
             {item.label}
+            {item.href === '/discover' && discoverBadge > 0 && (
+              <span
+                className="rounded-full px-1.5 font-tabular text-[10px] leading-none"
+                style={{ background: 'var(--t2-bg)', color: 'var(--t2-ink)' }}
+              >
+                {discoverBadge}
+              </span>
+            )}
           </Link>
         );
       })}

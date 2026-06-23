@@ -55,7 +55,7 @@ export default function LoginPage() {
           Lead Ops
         </p>
         <p className="text-[12.5px] mt-5" style={{ color: 'var(--ink-3)' }}>
-          Sign in with an allowlisted account.
+          Sign in to your Capricorn account.
         </p>
       </div>
 
@@ -102,9 +102,6 @@ export default function LoginPage() {
       >
         {loading === 'google' ? 'Redirecting…' : 'Sign in with Google'}
       </button>
-      <p className="text-[11px] mt-2 text-center italic" style={{ color: 'var(--ink-3)' }}>
-        Google sign-in requires the Supabase Auth Google provider to be configured.
-      </p>
 
       {error && (
         <p

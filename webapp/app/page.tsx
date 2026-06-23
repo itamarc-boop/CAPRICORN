@@ -2,6 +2,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { requireAppUser } from '@/lib/auth/allowlist';
 import { getServerSupabase } from '@/lib/supabase/server';
+import TodayQueue from './today-queue';
+import TopbarActions from './topbar-actions';
 import {
   COMPANY_STATUSES,
   COMPANY_STATUS_LABELS,
@@ -208,7 +210,7 @@ export default async function DashboardPage() {
 
   const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [companiesRes, draftsRes, sendsRes, contactsRes] = await Promise.all([
+  const [companiesRes, draftsRes, sendsRes, contactsRes, gmailRes] = await Promise.all([
     supabase
       .from('companies')
       .select('id, country, icp_tier, status, company_name, created_at, batch_label, iteration'),
@@ -219,6 +221,7 @@ export default async function DashboardPage() {
       .gte('sent_at', sinceIso)
       .order('sent_at', { ascending: false }),
     supabase.from('contacts').select('id'),
+    supabase.from('integrations').select('id').eq('provider', 'gmail').limit(1),
   ]);
 
   if (companiesRes.error) {
@@ -237,22 +240,22 @@ export default async function DashboardPage() {
         <h2 className="font-display text-2xl mb-2" style={{ color: 'var(--navy-deep)' }}>
           No companies yet
         </h2>
-        <p className="text-[13.5px] mb-5" style={{ color: 'var(--ink-3)' }}>
-          Run the sync script to import your latest leads file.
+        <p className="text-[13.5px] mb-6" style={{ color: 'var(--ink-3)' }}>
+          Run Discover to find your first leads, then connect Gmail so you can email them.
         </p>
-        <pre
-          className="font-tabular inline-block text-left text-[12px] px-4 py-3 rounded"
-          style={{ background: 'var(--surface-2)', color: 'var(--ink-2)',
-                   border: '1px solid var(--line)' }}
-        >
-          python3 tools/sync_leads_to_supabase.py .tmp/leads_2026-05-27_iter2_v2.json --iteration 2
-        </pre>
-        <p className="text-[13px] mt-5" style={{ color: 'var(--ink-3)' }}>
-          Or <Link href="/integrations" className="link-soft">connect a Gmail mailbox</Link> first.
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
+          <Link href="/discover" className="btn-primary text-[13px]">
+            Discover your first leads
+          </Link>
+          <Link href="/integrations" className="btn-ghost text-[13px]">
+            Connect Gmail
+          </Link>
+        </div>
       </div>
     );
   }
+
+  const gmailConnected = (gmailRes.data ?? []).length > 0;
 
   const drafts = (draftsRes.data ?? []) as DraftSlice[];
   const sends = (sendsRes.data ?? []) as SendSlice[];
@@ -287,15 +290,40 @@ export default async function DashboardPage() {
             Dashboard
           </h1>
           <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-            Where the pipeline stands right now.
+            Your outreach for today.
           </p>
         </div>
-        <div className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-          <Link href="/companies" className="link-soft">All companies →</Link>
+        <div className="flex items-center gap-2">
+          <TopbarActions />
+          <Link href="/companies" className="btn-ghost text-[13px]">
+            All companies
+          </Link>
         </div>
       </div>
 
-      {/* 2 — Funnel row */}
+      {/* Connect-Gmail prompt — sends fail silently with no mailbox. */}
+      {!gmailConnected && (
+        <Link
+          href="/integrations"
+          className="mb-6 flex items-center justify-between rounded px-3.5 py-2.5 text-[13px]"
+          style={{ background: 'var(--info-bg)', color: 'var(--info-ink)' }}
+        >
+          <span>Connect your Gmail so you can send approved emails.</span>
+          <span className="font-medium shrink-0 ml-3">Connect Gmail →</span>
+        </Link>
+      )}
+
+      {/* 2 — Today work queue (the cockpit) */}
+      <TodayQueue />
+
+      {/* 3 — Pipeline context (how am I doing) */}
+      <div className="flex items-end justify-between pb-3 mb-4 border-b" style={{ borderColor: 'var(--line)' }}>
+        <h2 className="font-display text-[20px] leading-none" style={{ color: 'var(--navy-deep)' }}>
+          Pipeline
+        </h2>
+      </div>
+
+      {/* Funnel row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {FUNNEL_STATUSES.map((status) => (
           <Link

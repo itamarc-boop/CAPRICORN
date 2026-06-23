@@ -102,6 +102,15 @@ export const DRAFT_STATUSES = [
 
 export type DraftStatus = (typeof DRAFT_STATUSES)[number];
 
+export const DRAFT_STATUS_LABELS: Record<DraftStatus, string> = {
+  draft: 'Draft',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  sending: 'Sending',
+  sent: 'Sent',
+  failed: 'Failed',
+};
+
 export const DRAFT_STATUS_STYLES: Record<DraftStatus, { ink: string; bg: string }> = {
   draft:    { ink: 'var(--info-ink)',  bg: 'var(--info-bg)' },
   approved: { ink: 'var(--t2-ink)',    bg: 'var(--t2-bg)' },
@@ -226,6 +235,8 @@ export type PipelineRun = {
   error: string | null;
   explorium_credits: number | null;
   anthropic_usd: number | null;
+  /** Whether discovered leads synced into the CRM. null=not attempted, false=sync failed. */
+  crm_synced: boolean | null;
   batch_label: string | null;
   requested_by: string | null;
   gh_run_url: string | null;

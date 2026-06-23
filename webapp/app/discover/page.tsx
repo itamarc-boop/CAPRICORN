@@ -6,7 +6,7 @@ import DiscoveryPanel from './discovery-panel';
 export const dynamic = 'force-dynamic';
 
 export default async function DiscoverPage() {
-  await requireAppUser();
+  const appUser = await requireAppUser();
   const supabase = await getServerSupabase();
   const { data: runs, error } = await supabase
     .from('pipeline_runs')
@@ -36,10 +36,10 @@ export default async function DiscoverPage() {
         </h1>
         <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
           Find new importer and distributor leads in any market. A run takes a few minutes
-          and delivers a Google Sheet.
+          and adds new companies to your pipeline that you can email right away.
         </p>
       </div>
-      <DiscoveryPanel initialRuns={(runs ?? []) as PipelineRun[]} />
+      <DiscoveryPanel initialRuns={(runs ?? []) as PipelineRun[]} role={appUser.role} />
     </div>
   );
 }

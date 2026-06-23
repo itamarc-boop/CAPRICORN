@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAppUser } from '@/lib/auth/allowlist';
 import { getServerSupabase, getServiceSupabase } from '@/lib/supabase/server';
 import { triggerDiscoveryRun } from '@/lib/github/dispatch';
+import { isSupportedCountry } from '@/lib/countries';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,11 @@ export async function POST(req: NextRequest) {
     typeof payload.country === 'string' ? payload.country.trim() : '';
   if (!country) {
     return NextResponse.json({ error: 'missing_country' }, { status: 400 });
+  }
+  // Guard before spending any credits: a country the pipeline can't resolve
+  // would only fail deep in a paid run. Mirrors COUNTRY_CODES in explorium_api.py.
+  if (!isSupportedCountry(country)) {
+    return NextResponse.json({ error: 'unsupported_country' }, { status: 400 });
   }
 
   // Coerce target_leads to int, clamp to [5,60], default 25.

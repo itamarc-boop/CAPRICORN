@@ -14,16 +14,16 @@ import {
   type Template,
 } from '@/lib/db/types';
 import StatusControl from './status-control';
-import ComposeEmail from './compose-email';
 import ContactsPanel from './contacts-panel';
-import DraftActions from './draft-actions';
+import EmailPanel, { type PanelDraft } from './email-panel';
+import WriteEmailButton from './write-email-button';
 import { EditableBasics, EditableTier, EditableWebsite, NotesPanel } from './editable-fields';
 
 export const dynamic = 'force-dynamic';
 
 type DraftListItem = Pick<
   EmailDraft,
-  'id' | 'contact_id' | 'subject' | 'status' | 'language' | 'created_at'
+  'id' | 'contact_id' | 'subject' | 'status' | 'language' | 'created_at' | 'sent_at' | 'error'
 >;
 
 /* ────────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ export default async function CompanyDetailPage(
       .order('sent_at', { ascending: false }),
     supabase
       .from('email_drafts')
-      .select('id, contact_id, subject, status, language, created_at')
+      .select('id, contact_id, subject, status, language, created_at, sent_at, error')
       .eq('company_id', id)
       .order('created_at', { ascending: false }),
   ]);
@@ -275,12 +275,7 @@ export default async function CompanyDetailPage(
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <a href="#draft" className="btn-primary text-[13px] inline-flex items-center">
-              Generate draft
-            </a>
-            <a href="#compose" className="btn-ghost text-[13px] inline-flex items-center">
-              Send email
-            </a>
+            <WriteEmailButton />
             {company.website && (
               <a
                 href={externalHref(company.website)}
@@ -580,12 +575,13 @@ export default async function CompanyDetailPage(
             </div>
           </Section>
 
-          {/* 10 · Generate AI draft */}
-          <Section id="draft" title="Generate AI draft">
-            <DraftActions
-              companyId={company.id}
+          {/* 10 · Email — write a draft, then approve & send in place */}
+          <Section id="email" title="Email">
+            <EmailPanel
+              company={company}
               contacts={contacts}
-              templates={templates.map((t) => ({ id: t.id, name: t.name }))}
+              templates={templates}
+              initialDrafts={drafts as PanelDraft[]}
             />
           </Section>
 
@@ -596,11 +592,6 @@ export default async function CompanyDetailPage(
 
           {/* 12 · Notes */}
           <NotesPanel company={company} />
-
-          {/* 13 · Send email */}
-          <Section id="compose" title="Send email">
-            <ComposeEmail company={company} contacts={contacts} templates={templates} />
-          </Section>
         </aside>
       </div>
     </div>

@@ -15,7 +15,7 @@ const TIERS = ['Tier 1', 'Tier 2', 'Tier 3'];
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ country?: string; tier?: string; status?: string }>;
+  searchParams: Promise<{ country?: string; tier?: string; status?: string; batch?: string }>;
 }) {
   await requireAppUser();
   const sp = await searchParams;
@@ -47,19 +47,17 @@ export default async function CompaniesPage({
         <h2 className="font-display text-2xl mb-2" style={{ color: 'var(--navy-deep)' }}>
           No companies yet
         </h2>
-        <p className="text-[13.5px] mb-5" style={{ color: 'var(--ink-3)' }}>
-          Run the sync script to import your latest leads file.
+        <p className="text-[13.5px] mb-6" style={{ color: 'var(--ink-3)' }}>
+          Run Discover to find your first leads, then connect Gmail so you can email them.
         </p>
-        <pre
-          className="font-tabular inline-block text-left text-[12px] px-4 py-3 rounded"
-          style={{ background: 'var(--surface-2)', color: 'var(--ink-2)',
-                   border: '1px solid var(--line)' }}
-        >
-          python3 tools/sync_leads_to_supabase.py .tmp/leads_2026-06-11_iter4.json --iteration 4
-        </pre>
-        <p className="text-[13px] mt-5" style={{ color: 'var(--ink-3)' }}>
-          Or <Link href="/integrations" className="link-soft">connect a Gmail mailbox</Link> first.
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
+          <Link href="/discover" className="btn-primary text-[13px]">
+            Discover your first leads
+          </Link>
+          <Link href="/integrations" className="btn-ghost text-[13px]">
+            Connect Gmail
+          </Link>
+        </div>
       </div>
     );
   }
@@ -71,6 +69,7 @@ export default async function CompaniesPage({
       sp.status && (COMPANY_STATUSES as readonly string[]).includes(sp.status)
         ? sp.status
         : '',
+    batch: sp.batch ?? '',
   };
 
   return (
@@ -89,7 +88,7 @@ export default async function CompaniesPage({
         </div>
       </div>
       <CompaniesTable
-        key={`${initialFilters.country}|${initialFilters.tier}|${initialFilters.status}`}
+        key={`${initialFilters.country}|${initialFilters.tier}|${initialFilters.status}|${initialFilters.batch}`}
         initialCompanies={companies}
         templates={templates}
         initialFilters={initialFilters}
