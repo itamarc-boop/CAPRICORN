@@ -111,6 +111,14 @@ ENRICH_MULTIPLIER = 4
 MAX_DISCOVER = 600
 MAX_ENRICH = 250
 
+# Loop-to-target: keep pulling NEW companies through the funnel in batches until
+# the requested number of leads is delivered, the discoverable pool is exhausted,
+# or this many companies have been enriched (the per-run cost ceiling). Discovery
+# is free; enrichment is the cost driver, so we cap on companies enriched.
+# Override per run with the DISCOVER_ENRICH_CAP env var.
+DELIVER_ENRICH_CAP = 120
+MIN_BATCH = 15
+
 
 # ---------------------------------------------------------------------------
 # Run-status reporting (Supabase pipeline_runs)
@@ -217,6 +225,143 @@ def _dump(path: Path, data: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Persistent "already tried" store (Supabase seen_companies). Every company we
+# enrich + judge — qualified OR rejected — is recorded here keyed by Explorium
+# business_id, so future runs skip it and never re-spend credits on it. Replaces
+# the ephemeral local .tmp/seen_companies.json (which doesn't survive CI runs).
+# ---------------------------------------------------------------------------
+
+def _supabase():
+    """Service-role client, or None when creds are missing (manual runs)."""
+    try:
+        from supabase import create_client  # type: ignore
+        url = os.getenv("NEXT_PUBLIC_SUPABASE_URL") or os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if url and key:
+            return create_client(url, key)
+        print("[seen] Supabase creds missing — cross-run dedup disabled.")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[seen] could not init Supabase client: {exc}")
+    return None
+
+
+def _load_seen(country_code: str) -> set:
+    """business_ids already enriched+judged for this country in prior runs."""
+    sb = _supabase()
+    if not sb:
+        return set()
+    seen: set = set()
+    try:
+        offset = 0
+        while True:
+            res = (sb.table("seen_companies").select("business_id")
+                   .eq("country", country_code)
+                   .range(offset, offset + 999).execute())
+            page = res.data or []
+            for row in page:
+                if row.get("business_id"):
+                    seen.add(row["business_id"])
+            if len(page) < 1000:
+                break
+            offset += 1000
+    except Exception as exc:  # noqa: BLE001 — never fail a run over dedup
+        print(f"[seen] load failed (continuing with empty set): {exc}")
+    return seen
+
+
+def _record_seen(tried: List[Dict[str, Any]], country_code: str,
+                 run_id: str) -> None:
+    """Upsert every enriched+judged company so future runs skip it."""
+    sb = _supabase()
+    if not sb or not tried:
+        return
+    rows = [{"business_id": t["business_id"], "country": country_code,
+             "company_name": t.get("company_name"), "verdict": t.get("verdict"),
+             "run_id": (run_id or None)}
+            for t in tried if t.get("business_id")]
+    if not rows:
+        return
+    try:
+        sb.table("seen_companies").upsert(rows, on_conflict="business_id").execute()
+        print(f"[seen] recorded {len(rows)} companies as tried")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[seen] record failed (ignored): {exc}")
+
+
+def _process_batch(companies: List[Dict[str, Any]], *, work: Path,
+                   env: Dict[str, str], is_uk: bool, tag: str, client) -> Any:
+    """Run ONE batch through enrich -> research -> evidence -> score -> verify ->
+    judge -> re-score. Returns (qualified, tried): the post-judge qualified score
+    records, and a {business_id, company_name, verdict} dict for every enriched
+    company (so the caller can record them all as seen)."""
+    bwork = work / tag
+    bwork.mkdir(parents=True, exist_ok=True)
+
+    enrich_ids = [r.get("business_id") for r in companies if r.get("business_id")]
+    if not enrich_ids:
+        return [], []
+    enriched = client.enrich_businesses(enrich_ids)
+    if not enriched:
+        return [], []
+    firmo = bwork / "firmographics.json"
+    _dump(firmo, {"data": enriched})
+
+    records = json.loads(_run([sys.executable, str(TOOLS / "explorium_to_record.py"),
+                               str(firmo)], f"map [{tag}]").stdout)
+    rec_path = bwork / "records.json"
+    _dump(rec_path, records)
+
+    res_path = bwork / "researched.json"
+    _run([sys.executable, str(TOOLS / "research_company_website.py"),
+          "--records", str(rec_path), "--out", str(res_path)],
+         f"research [{tag}]", allow_nonzero=True)
+    if not res_path.exists():
+        raise RuntimeError(f"research produced no output for batch {tag}.")
+
+    ev_path = bwork / "evidence.json"
+    _run([sys.executable, str(TOOLS / "extract_evidence.py"),
+          "--records", str(res_path), "--out", str(ev_path)],
+         f"evidence [{tag}]", env=env)
+
+    scored = bwork / "scored.json"
+    _run_score(ev_path, scored, env, f"score [{tag}]")
+    current = scored
+    if is_uk:
+        uk = bwork / "records_uk.json"
+        _run([sys.executable, str(TOOLS / "uk_importers_lookup.py"),
+              "--records", str(scored), "--out", str(uk)],
+             f"uk lookup [{tag}]", allow_nonzero=True)
+        if uk.exists():
+            uk_scored = bwork / "scored_uk.json"
+            _run_score(uk, uk_scored, env, f"score-uk [{tag}]")
+            current = uk_scored
+
+    verified = bwork / "verified.json"
+    _run([sys.executable, str(TOOLS / "verify_import_evidence.py"),
+          "--records", str(current), "--out", str(verified)],
+         f"verify [{tag}]", env=env)
+    scored_v = bwork / "scored_verified.json"
+    _run_score(verified, scored_v, env, f"score-verify [{tag}]")
+
+    judged = bwork / "judged.json"
+    _run([sys.executable, str(TOOLS / "bdr_judge.py"),
+          "--candidates", str(scored_v), "--out", str(judged)],
+         f"judge [{tag}]", env=env)
+    final = bwork / "scored_final.json"
+    _run_score(judged, final, env, f"score-final [{tag}]")
+
+    records_final = _load(final)
+    qualified = [r for r in records_final if (r.get("score") or {}).get("qualified")]
+    qual_ids = {r.get("explorium_business_id") for r in qualified}
+    tried = [{"business_id": bid,
+              "company_name": r.get("company_name") or r.get("name"),
+              "verdict": "qualified" if bid in qual_ids else "rejected"}
+             for r in records_final
+             if (bid := r.get("explorium_business_id"))]
+    return qualified, tried
+
+
+# ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 
@@ -249,10 +394,15 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     # before any score subprocess runs.
     env = dict(os.environ)
     env["EXTRA_TARGET_COUNTRIES"] = f"{country_norm.lower()}:Medium"
-    # Budget caps scaled to target.
-    env["EVIDENCE_EXTRACT_USD_BUDGET"] = f"{max(1.5, target * 0.08):.2f}"
-    env["BDR_JUDGE_USD_BUDGET"] = f"{max(2.0, target * 0.12):.2f}"
-    env["WEB_VERIFY_USD_BUDGET"] = f"{max(1.0, target * 0.06):.2f}"
+    # Loop-to-target sizing: each discovery round enriches/judges ~batch_size
+    # companies, and the evidence/judge subprocesses run once PER round, so these
+    # are per-batch budget ceilings (generous enough not to truncate a batch).
+    # Total spend across rounds is bounded by the enrich cap below.
+    enrich_cap = int(os.getenv("DISCOVER_ENRICH_CAP", str(DELIVER_ENRICH_CAP)))
+    batch_size = max(target * ENRICH_MULTIPLIER, MIN_BATCH)
+    env["EVIDENCE_EXTRACT_USD_BUDGET"] = f"{max(1.5, batch_size * 0.06):.2f}"
+    env["BDR_JUDGE_USD_BUDGET"] = f"{max(2.5, batch_size * 0.15):.2f}"
+    env["WEB_VERIFY_USD_BUDGET"] = f"{max(1.0, batch_size * 0.06):.2f}"
 
     client = ExploriumClient()
     keywords = ISRAEL_KEYWORDS if is_israel else VERTICAL_KEYWORDS
@@ -272,187 +422,132 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     except Exception as exc:  # noqa: BLE001 — sizing must not fail the run
         print(f"[stats] sizing failed (continuing): {exc}")
 
-    # --- 2. discover --------------------------------------------------------
+    # --- 2. discover a large candidate pool (FREE — only enrichment costs) --
     reporter.update(stage="discovering companies")
-    discover_size = min(MAX_DISCOVER, max(target * DISCOVER_MULTIPLIER, target))
-    discovered = client.fetch_businesses(base_filters, size=discover_size,
+    discovered = client.fetch_businesses(base_filters, size=MAX_DISCOVER,
                                          page_size=100)
-    print(f"[discover] fetched {len(discovered)} businesses "
-          f"(requested {discover_size})")
-    discovered_path = work / "discovered.json"
-    _dump(discovered_path, discovered)
+    print(f"[discover] fetched {len(discovered)} businesses (candidate pool)")
     reporter.update(discovered_count=len(discovered))
     if not discovered:
         raise RuntimeError(
             f"discovery returned 0 businesses for {country_norm} ({code}) — "
             "check keywords/filters/credits before retrying.")
 
-    # --- 3. dedup against prior runs (filter mode) --------------------------
-    dedup_path = work / "to_enrich.json"
-    proc = _run([sys.executable, str(TOOLS / "dedup_companies.py"),
-                 str(discovered_path)], "dedup")
-    deduped = json.loads(proc.stdout) if proc.stdout.strip() else []
-    _dump(dedup_path, deduped)
-    print(f"[dedup] {len(deduped)} survive after removing already-seen")
-    if not deduped:
-        raise RuntimeError("all discovered companies were already delivered "
-                           "in prior runs (seen_companies.json) — nothing new.")
+    # --- 3. drop companies tried in prior runs (persistent seen store) ------
+    seen_ids = _load_seen(code)
+    pool = [c for c in discovered
+            if c.get("business_id") and c["business_id"] not in seen_ids]
+    print(f"[dedup] {len(pool)} new companies "
+          f"({len(discovered) - len(pool)} already tried in prior runs)")
+    if not pool:
+        raise RuntimeError(
+            "every discovered company was already tried in prior runs — nothing "
+            "new to enrich. Try a different market or broaden the keywords.")
 
-    # --- 4. enrich firmographics (credit spend) -----------------------------
-    reporter.update(stage="enriching companies")
-    enrich_cap = min(MAX_ENRICH, max(target * ENRICH_MULTIPLIER, target))
-    to_enrich = deduped[:enrich_cap]
-    enrich_ids = [r.get("business_id") for r in to_enrich
-                  if r.get("business_id")]
-    print(f"[enrich] enriching {len(enrich_ids)} companies "
-          f"(cap {enrich_cap})")
-    enriched_data = client.enrich_businesses(enrich_ids)
-    explorium_credits += len(enriched_data)
-    firmographics_path = work / "firmographics.json"
-    _dump(firmographics_path, {"data": enriched_data})
-    reporter.update(enriched_count=len(enriched_data))
-    if not enriched_data:
-        raise RuntimeError("firmographics enrich returned no data.")
+    # --- LOOP: enrich + judge in batches until target met / cap hit ---------
+    # Keep pulling NEW companies through the full funnel, accumulating qualified
+    # leads, until we deliver the target, exhaust the pool, or reach the enrich
+    # cap. Every company enriched (qualified or rejected) is recorded as seen so
+    # future runs skip it.
+    delivered: List[Dict[str, Any]] = []
+    enriched_total = 0
+    cursor = 0
+    round_idx = 0
+    while (len(delivered) < target and cursor < len(pool)
+           and enriched_total < enrich_cap):
+        round_idx += 1
+        take = min(batch_size, enrich_cap - enriched_total, len(pool) - cursor)
+        batch = pool[cursor:cursor + take]
+        cursor += take
+        reporter.update(stage=f"enriching + judging (round {round_idx})")
+        print(f"\n=== round {round_idx}: {len(batch)} companies "
+              f"(delivered {len(delivered)}/{target}, "
+              f"enriched {enriched_total}/{enrich_cap}) ===")
+        qualified, tried = _process_batch(
+            batch, work=work, env=env, is_uk=is_uk, tag=f"r{round_idx}",
+            client=client)
+        enriched_total += len(tried)
+        explorium_credits += len(tried)
+        delivered.extend(qualified)
+        _record_seen(tried, code, run_id)
+        reporter.update(enriched_count=enriched_total,
+                        qualified_count=len(delivered))
+        print(f"[round {round_idx}] +{len(qualified)} qualified "
+              f"(total {len(delivered)}/{target}); "
+              f"enriched {enriched_total}/{enrich_cap}")
 
-    # --- 5. map firmographics -> score records ------------------------------
-    records_path = work / "records.json"
-    proc = _run([sys.executable, str(TOOLS / "explorium_to_record.py"),
-                 str(firmographics_path)], "mapping records")
-    records = json.loads(proc.stdout)
-    _dump(records_path, records)
-    print(f"[map] {len(records)} records")
+    stop_reason = ("target met" if len(delivered) >= target
+                   else "pool exhausted" if cursor >= len(pool)
+                   else "enrich cap reached")
+    # Best-scored first for delivery order. Keep ALL qualified — overshooting the
+    # target with extra real leads is a bonus, not a problem.
+    delivered.sort(key=lambda r: (r.get("score") or {}).get("score") or 0,
+                   reverse=True)
+    print(f"\n[loop] {len(delivered)} qualified after {round_idx} round(s), "
+          f"{enriched_total} enriched ({stop_reason}).")
+    delivered_path = work / "delivered_scored.json"
+    _dump(delivered_path, delivered)
 
-    # --- 6. website research (free; tolerate the >25% failure exit) ---------
-    reporter.update(stage="researching websites")
-    researched_path = work / "researched.json"
-    _run([sys.executable, str(TOOLS / "research_company_website.py"),
-          "--records", str(records_path), "--out", str(researched_path)],
-         "researching websites", allow_nonzero=True)
-    if not researched_path.exists():
-        raise RuntimeError("research step produced no output file — hard fail "
-                            "(network or input problem).")
-    print(f"[research] researched records written; partial failures tolerated "
-          f"(output present).")
-
-    # --- 7. evidence extraction (Anthropic API) -----------------------------
-    reporter.update(stage="extracting evidence")
-    evidence_path = work / "evidence.json"
-    _run([sys.executable, str(TOOLS / "extract_evidence.py"),
-          "--records", str(researched_path), "--out", str(evidence_path)],
-         "extracting evidence", env=env)
-
-    # --- 8. provisional score -----------------------------------------------
-    reporter.update(stage="scoring")
-    scored_path = work / "scored.json"
-    _run_score(evidence_path, scored_path, env, "scoring (provisional)")
-
-    # --- 9. UK importer lookup (UK only), then re-score ---------------------
-    current_scored = scored_path
-    if is_uk:
-        uk_path = work / "records_uk.json"
-        _run([sys.executable, str(TOOLS / "uk_importers_lookup.py"),
-              "--records", str(scored_path), "--out", str(uk_path)],
-             "uk importer lookup", allow_nonzero=True)
-        if uk_path.exists():
-            uk_scored = work / "scored_uk.json"
-            _run_score(uk_path, uk_scored, env, "scoring (post-UK)")
-            current_scored = uk_scored
-
-    # --- 10. web-search verification on the shortlist, then re-score --------
-    verified_path = work / "verified.json"
-    _run([sys.executable, str(TOOLS / "verify_import_evidence.py"),
-          "--records", str(current_scored), "--out", str(verified_path)],
-         "verifying import evidence", env=env)
-    scored_after_verify = work / "scored_verified.json"
-    _run_score(verified_path, scored_after_verify, env,
-               "scoring (post-verify)")
-
-    # --- 11. fetch prospects for qualifying companies (credit spend) --------
-    reporter.update(stage="finding contacts")
-    scored_records = _load(scored_after_verify)
-    qualified = [r for r in scored_records
-                 if (r.get("score") or {}).get("qualified")]
-    qualified_ids = [r.get("explorium_business_id") for r in qualified
-                     if r.get("explorium_business_id")]
-    print(f"[prospects] {len(qualified)} qualifying companies before judge; "
-          f"fetching contacts for {len(qualified_ids)}")
-    prospects_raw_path = work / "prospects_raw.json"
-    if qualified_ids:
-        # job_level only — Explorium's job_department enum is narrow and
-        # rejects values like 'general_management'/'operations'. pick_prospects
-        # ranks by title regardless, so the department filter adds little.
+    # --- fetch + pick + enrich contacts for the DELIVERED set ---------------
+    contacts_by_biz: Dict[str, List[Dict[str, Any]]] = {}
+    if delivered:
+        reporter.update(stage="finding contacts")
+        qualified_ids = [r.get("explorium_business_id") for r in delivered
+                         if r.get("explorium_business_id")]
+        # job_level only — Explorium's job_department enum rejects values like
+        # 'operations'; pick_prospects ranks by title regardless.
         try:
             prospects = client.fetch_prospects(
                 qualified_ids, job_levels=PROSPECT_JOB_LEVELS, size=1000)
         except ExploriumError as exc:
-            print(f"[prospects] filtered fetch rejected ({exc}); "
-                  "retrying with business_id only")
+            print(f"[prospects] filtered fetch rejected ({exc}); retrying unfiltered")
             prospects = client.fetch_prospects(qualified_ids, size=1000)
-        # If the seniority filter returns nothing, retry unfiltered (SOP:
-        # European SMEs rarely tag seniority cleanly). pick_prospects ranks.
-        if not prospects:
-            print("[prospects] filtered fetch empty — retrying with "
-                  "business_id only")
+        if not prospects:  # European SMEs rarely tag seniority — retry unfiltered
             prospects = client.fetch_prospects(qualified_ids, size=1000)
-    else:
-        prospects = []
-    _dump(prospects_raw_path, prospects)
-    print(f"[prospects] fetched {len(prospects)} prospect records")
+        prospects_raw_path = work / "prospects_raw.json"
+        _dump(prospects_raw_path, prospects)
+        print(f"[prospects] fetched {len(prospects)} prospect records")
 
-    # --- 12. pick the best contacts deterministically -----------------------
-    picked_path = work / "picked.json"
-    if prospects:
-        _run([sys.executable, str(TOOLS / "pick_prospects.py"),
-              "--prospects", str(prospects_raw_path),
-              "--companies", str(scored_after_verify),
-              "--out", str(picked_path)], "picking prospects")
-        picked = _load(picked_path)
-    else:
-        picked = []
-        _dump(picked_path, picked)
-    print(f"[pick] {len(picked)} picked prospects")
+        picked_path = work / "picked.json"
+        if prospects:
+            _run([sys.executable, str(TOOLS / "pick_prospects.py"),
+                  "--prospects", str(prospects_raw_path),
+                  "--companies", str(delivered_path),
+                  "--out", str(picked_path)], "picking prospects")
+            picked = _load(picked_path)
+        else:
+            picked = []
+        print(f"[pick] {len(picked)} picked prospects")
 
-    # --- 13. enrich contacts + profiles, merge onto picked contacts ---------
-    reporter.update(stage="enriching contacts")
-    contacts_by_biz: Dict[str, List[Dict[str, Any]]] = {}
-    if picked:
-        pids = [p.get("prospect_id") for p in picked if p.get("prospect_id")]
-        contact_info = client.enrich_prospect_contacts(pids) if pids else {}
-        profiles = client.enrich_prospect_profiles(pids) if pids else {}
-        explorium_credits += len(contact_info) + len(profiles)
-        for p in picked:
-            pid = p.get("prospect_id")
-            bid = p.get("business_id")
-            if not bid:
-                continue
-            ci = contact_info.get(pid, {})
-            pr = profiles.get(pid, {})
-            contact = {
-                "business_id": bid,
-                "full_name": pr.get("full_name") or p.get("full_name") or "",
-                "job_title": pr.get("job_title") or p.get("job_title") or "",
-                "linkedin_url": pr.get("linkedin_url") or "",
-                "email": ci.get("email") or "",
-                "phone": ci.get("phone") or "",
-            }
-            contacts_by_biz.setdefault(str(bid), []).append(contact)
+        if picked:
+            reporter.update(stage="enriching contacts")
+            pids = [p.get("prospect_id") for p in picked if p.get("prospect_id")]
+            contact_info = client.enrich_prospect_contacts(pids) if pids else {}
+            profiles = client.enrich_prospect_profiles(pids) if pids else {}
+            explorium_credits += len(contact_info) + len(profiles)
+            for p in picked:
+                pid = p.get("prospect_id")
+                bid = p.get("business_id")
+                if not bid:
+                    continue
+                ci = contact_info.get(pid, {})
+                pr = profiles.get(pid, {})
+                contacts_by_biz.setdefault(str(bid), []).append({
+                    "business_id": bid,
+                    "full_name": pr.get("full_name") or p.get("full_name") or "",
+                    "job_title": pr.get("job_title") or p.get("job_title") or "",
+                    "linkedin_url": pr.get("linkedin_url") or "",
+                    "email": ci.get("email") or "",
+                    "phone": ci.get("phone") or "",
+                })
     contacts_path = work / "contacts.json"
     _dump(contacts_path, contacts_by_biz)
     print(f"[contacts] merged contacts for {len(contacts_by_biz)} companies")
 
-    # --- 14. BDR judge, then re-score to fold the verdict -------------------
-    reporter.update(stage="judging")
-    judged_path = work / "judged.json"
-    _run([sys.executable, str(TOOLS / "bdr_judge.py"),
-          "--candidates", str(scored_after_verify), "--out", str(judged_path)],
-         "judging", env=env)
-    scored_final = work / "scored_final.json"
-    _run_score(judged_path, scored_final, env, "scoring (post-judge)")
-
-    # --- 15. pre-ship structural audit (hard gate) --------------------------
-    reporter.update(stage="judging")
+    # --- pre-ship structural audit (hard gate) ------------------------------
+    reporter.update(stage="auditing")
     proc = _run([sys.executable, str(TOOLS / "eval_against_labels.py"),
-                 "--preship", str(scored_final)],
+                 "--preship", str(delivered_path)],
                 "pre-ship audit", allow_nonzero=True)
     if proc.returncode != 0:
         raise RuntimeError(
@@ -460,11 +555,11 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
             f"Audit output:\n{(proc.stdout or '').strip()[-1500:]}")
     print("[preship] audit PASSED")
 
-    # --- 16. build the final lead rows --------------------------------------
+    # --- build the final lead rows ------------------------------------------
     reporter.update(stage="building sheet")
     out_base = work / "leads"
     _run([sys.executable, str(TOOLS / "build_lead_rows.py"),
-          "--companies", str(scored_final),
+          "--companies", str(delivered_path),
           "--contacts", str(contacts_path),
           "--out", str(out_base)], "building lead rows")
     leads_json = out_base.with_suffix(".json")
@@ -504,11 +599,12 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
         reporter.update(crm_synced=False)
         print(f"[crm] sync failed (sheet still delivered): {exc}")
 
-    # rough Anthropic spend estimate (caps are the worst case)
-    anthropic_usd = round(
+    # rough Anthropic spend estimate (per-batch caps x rounds = worst case)
+    anthropic_usd = round((
         float(env["EVIDENCE_EXTRACT_USD_BUDGET"])
         + float(env["BDR_JUDGE_USD_BUDGET"])
-        + float(env["WEB_VERIFY_USD_BUDGET"]), 2)
+        + float(env["WEB_VERIFY_USD_BUDGET"])
+    ) * max(1, round_idx), 2)
 
     reporter.update(
         status="succeeded",
@@ -518,7 +614,7 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
         leads_delivered=leads_delivered,
         qualified_count=qualified_count,
         discovered_count=len(discovered),
-        enriched_count=len(enriched_data),
+        enriched_count=enriched_total,
         explorium_credits=explorium_credits,
         anthropic_usd=anthropic_usd,
         finished_at=_now(),
