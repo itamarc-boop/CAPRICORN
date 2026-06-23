@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
 
@@ -13,6 +13,9 @@ export default function TopbarActions() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'warn'; text: string } | null>(null);
+  // Unique per instance — rendered in both the topbar and the Home header, and
+  // Supabase dedupes channels by name (collision throws on the second .on()).
+  const channelId = useId();
 
   const refetch = useCallback(async () => {
     const supabase = getBrowserSupabase();
@@ -30,7 +33,7 @@ export default function TopbarActions() {
   useEffect(() => {
     const supabase = getBrowserSupabase();
     const channel = supabase
-      .channel('topbar-approved')
+      .channel(`topbar-approved-${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'email_drafts' }, () => {
         void refetch();
       })
@@ -38,7 +41,7 @@ export default function TopbarActions() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refetch]);
+  }, [refetch, channelId]);
 
   async function startQueue() {
     setStarting(true);

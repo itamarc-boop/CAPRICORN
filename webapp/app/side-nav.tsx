@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
@@ -107,6 +107,9 @@ function isActive(pathname: string, href: string): boolean {
 function useDiscoverBadge(): number {
   const pathname = usePathname();
   const [count, setCount] = useState(0);
+  // Unique per instance: SideNav and MobileNav both call this hook, and Supabase
+  // dedupes channels by name — a shared name throws "add callbacks after subscribe".
+  const channelId = useId();
 
   const scan = useCallback(async () => {
     if (typeof window === 'undefined') return;
@@ -144,7 +147,7 @@ function useDiscoverBadge(): number {
   useEffect(() => {
     const supabase = getBrowserSupabase();
     const channel = supabase
-      .channel('discover-badge')
+      .channel(`discover-badge-${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_runs' }, () => {
         void scan();
       })
@@ -152,7 +155,7 @@ function useDiscoverBadge(): number {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [scan]);
+  }, [scan, channelId]);
 
   return pathname === '/discover' ? 0 : count;
 }
