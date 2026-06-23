@@ -67,7 +67,7 @@ export default function RunWatcher() {
 
   const succeeded = banner.status === 'succeeded';
   const count = banner.qualified_count ?? 0;
-  const canReview = succeeded && banner.crm_synced === true && !!banner.batch_label;
+  const canReview = succeeded && banner.crm_synced === true && !!banner.batch_label && count > 0;
 
   return (
     <div
@@ -83,7 +83,11 @@ export default function RunWatcher() {
         {succeeded ? (
           <>
             <span className="font-medium">{titleCase(banner.country)} run finished</span>
-            {canReview ? ` — ${count} new ${count === 1 ? 'company' : 'companies'}` : ' — delivered to the sheet'}
+            {canReview
+              ? ` — ${count} new ${count === 1 ? 'company' : 'companies'}`
+              : count === 0
+                ? ' — no companies passed the bar this time'
+                : ' — delivered to the sheet'}
           </>
         ) : (
           <>

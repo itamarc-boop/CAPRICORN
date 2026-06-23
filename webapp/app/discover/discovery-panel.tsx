@@ -392,26 +392,36 @@ function RunCard({ run, isAdmin }: { run: PipelineRun; isAdmin: boolean }) {
 
       {/* Success: review the new companies in the CRM and/or open the sheet. */}
       {run.status === 'succeeded' && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {run.crm_synced === true && run.batch_label && (
-            <Link
-              href={`/companies?batch=${encodeURIComponent(run.batch_label)}`}
-              className="btn-primary text-[13px] inline-block"
-            >
-              Review {reviewCount} new {reviewCount === 1 ? 'company' : 'companies'}
-            </Link>
+        <>
+          {reviewCount === 0 && (
+            <p className="mt-3 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+              No companies passed the quality bar this time. Try a larger aim, or another market
+              {' '}— yield is often thinner in newer markets.
+            </p>
           )}
-          {run.sheet_url && (
-            <a
-              href={run.sheet_url}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-ghost text-[13px] inline-block"
-            >
-              Open Sheet ↗
-            </a>
+          {(reviewCount > 0 || run.sheet_url) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {run.crm_synced === true && run.batch_label && reviewCount > 0 && (
+                <Link
+                  href={`/companies?batch=${encodeURIComponent(run.batch_label)}`}
+                  className="btn-primary text-[13px] inline-block"
+                >
+                  Review {reviewCount} new {reviewCount === 1 ? 'company' : 'companies'}
+                </Link>
+              )}
+              {run.sheet_url && (
+                <a
+                  href={run.sheet_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost text-[13px] inline-block"
+                >
+                  Open Sheet ↗
+                </a>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
 
       {/* Sync failed — leads went to the sheet but not the pipeline. */}
