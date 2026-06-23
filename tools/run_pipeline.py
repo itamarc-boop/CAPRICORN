@@ -288,6 +288,35 @@ def _record_seen(tried: List[Dict[str, Any]], country_code: str,
         print(f"[seen] record failed (ignored): {exc}")
 
 
+def _client_drive():
+    """The client's connected Google Drive (from the integrations table), or
+    (None, None, None) when none is connected — then the export falls back to the
+    operator's env credentials. Returns (oauth, master_sheet_id, integration_id),
+    where oauth is the {refresh_token, client_id, client_secret} dict that
+    export_leads_to_sheets accepts (client_id/secret = the webapp's Google OAuth
+    client that authorized the token)."""
+    sb = _supabase()
+    cid = os.getenv("GOOGLE_CLIENT_ID")
+    csec = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not sb or not cid or not csec:
+        return None, None, None
+    try:
+        res = (sb.table("integrations")
+               .select("id, refresh_token, master_sheet_id")
+               .eq("provider", "google_drive")
+               .order("created_at", desc=True)
+               .limit(1).execute())
+        row = (res.data or [None])[0]
+        if not row or not row.get("refresh_token"):
+            return None, None, None
+        oauth = {"refresh_token": row["refresh_token"],
+                 "client_id": cid, "client_secret": csec}
+        return oauth, row.get("master_sheet_id"), row.get("id")
+    except Exception as exc:  # noqa: BLE001 — fall back to operator Drive
+        print(f"[drive] client-Drive lookup failed (using operator Drive): {exc}")
+        return None, None, None
+
+
 def _process_batch(companies: List[Dict[str, Any]], *, work: Path,
                    env: Dict[str, str], is_uk: bool, tag: str, client) -> Any:
     """Run ONE batch through enrich -> research -> evidence -> score -> verify ->
@@ -571,17 +600,33 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
           "companies")
 
     # --- 17. export to Google Sheet (delivery) ------------------------------
+    # Into the CLIENT's own Drive if they connected one in the app (self-serve),
+    # else the operator's Drive (env GOOGLE_OAUTH_* + MASTER_SHEET_ID). Generic
+    # name "Capricorn Leads" so the client always recognises the deliverable;
+    # only used when CREATING a new sheet (runs append to the master afterwards).
     from export_to_sheets import export_leads_to_sheets  # noqa: E402
     delivery_emails = [e.strip() for e in
                        (os.getenv("DELIVERY_SHEET_EMAILS") or "").split(",")
                        if e.strip()]
-    # Generic, stable name so the client always recognises the deliverable
-    # (not country-specific). Only used when creating a NEW sheet — runs append
-    # to MASTER_SHEET_ID when set, keeping that one sheet's existing name.
     title = "Capricorn Leads"
-    sheet = export_leads_to_sheets(rows, title, delivery_emails or None,
-                                   spreadsheet_id=os.getenv("MASTER_SHEET_ID"))
-    print(f"[sheet] {sheet.get('sheet_url')}")
+    client_oauth, client_master, drive_integration_id = _client_drive()
+    if client_oauth:
+        sheet = export_leads_to_sheets(rows, title, delivery_emails or None,
+                                       spreadsheet_id=client_master,
+                                       oauth=client_oauth)
+        # Remember the client's master sheet so the next run appends to it.
+        if not client_master and sheet.get("sheet_id") and drive_integration_id:
+            try:
+                _supabase().table("integrations").update(
+                    {"master_sheet_id": sheet["sheet_id"]}
+                ).eq("id", drive_integration_id).execute()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[drive] could not save master sheet id: {exc}")
+        print(f"[sheet] (client Drive) {sheet.get('sheet_url')}")
+    else:
+        sheet = export_leads_to_sheets(rows, title, delivery_emails or None,
+                                       spreadsheet_id=os.getenv("MASTER_SHEET_ID"))
+        print(f"[sheet] {sheet.get('sheet_url')}")
 
     # --- 17.5 add the qualified leads to the CRM (companies/contacts) --------
     # Non-blocking by design: a sync failure must never fail an otherwise-good

@@ -15,6 +15,22 @@ export const GMAIL_SCOPES = [
   'openid',
 ];
 
+// Drive connect: drive.file (the app only touches files IT creates — non-sensitive,
+// no Google verification) + spreadsheets, so discovery sheets land in the client's
+// own Drive. Same OAuth client as Gmail; the two are separate consents.
+export const DRIVE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'openid',
+];
+
+export type ConnectProvider = 'gmail' | 'google_drive';
+
+export function scopesFor(provider: ConnectProvider): string[] {
+  return provider === 'google_drive' ? DRIVE_SCOPES : GMAIL_SCOPES;
+}
+
 export type IntegrationRow = {
   id: string;
   provider: 'gmail';
@@ -43,10 +59,15 @@ export function getOAuth2Client(): OAuth2Client {
  * refresh_token even if the user already granted scopes previously.
  */
 export function authUrlForGmailConnect(state: string): string {
+  return authUrlForConnect(state, 'gmail');
+}
+
+/** Build the Google consent URL for either the Gmail-send or the Drive connect. */
+export function authUrlForConnect(state: string, provider: ConnectProvider): string {
   return getOAuth2Client().generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: GMAIL_SCOPES,
+    scope: scopesFor(provider),
     state,
     include_granted_scopes: true,
   });

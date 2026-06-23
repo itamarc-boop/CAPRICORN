@@ -5,14 +5,16 @@
 **Your customer does almost nothing. They never touch an API, a key, or the Google
 Cloud console.** All of that lives in *your* deployment, set up once by you.
 
-The customer's entire setup is two things:
+The customer's entire setup is:
 1. You add their email to the allowlist (one SQL line).
-2. They open the app, sign in, and click **"Connect a Gmail mailbox"** — one Google
-   consent screen, no keys.
+2. They open the app, sign in, and on **Integrations** click **"Connect a Gmail
+   mailbox"** (to send) and **"Connect Google Drive"** (so lead sheets save to their
+   own Drive) — two one-click Google consents, no keys.
 
-That's it. They do **not** connect Drive, do **not** create API keys, do **not** set
-up Explorium/Anthropic/GitHub. Discovery runs on *your* keys in *your* GitHub Actions;
-the leads land in *their* CRM view inside the app.
+That's it. They do **not** create API keys, do **not** touch the Google Cloud console,
+do **not** set up Explorium/Anthropic/GitHub. Discovery runs on *your* keys in *your*
+GitHub Actions; the leads land in *their* CRM view inside the app, and the bonus
+spreadsheet lands in *their* Drive.
 
 ---
 
@@ -92,6 +94,17 @@ registered from earlier setup.
 > that's fine. (Only needed if you ever go past ~100 users or want to remove that notice
 > → submit for Google verification.)
 
+### 3b. Enable client-owned Drive sheets (one-time)
+So the client can connect their own Drive and discovery sheets save there:
+- **Google Cloud → OAuth consent screen → Scopes → Add:** `.../auth/drive.file`
+  and `.../auth/spreadsheets` (alongside the existing `gmail.send`). `drive.file` is
+  non-sensitive — the app only ever touches files it creates.
+- **Add two GitHub Actions secrets** (repo → Settings → Secrets and variables →
+  Actions), copied from `webapp/.env.local`: `GOOGLE_CLIENT_ID` and
+  `GOOGLE_CLIENT_SECRET`. These let the discovery worker write the sheet into the
+  client's connected Drive. (If you skip this, sheets just stay in your Drive — the
+  app still works.)
+
 ### 4. Wire the send scheduler (pg_cron)
 After the first prod deploy, open the Supabase SQL editor, paste
 `webapp/supabase/pg_cron_send_queue.sql` with `<APP_URL>` and `<CRON_SECRET>` filled in,
@@ -123,10 +136,13 @@ Add their email to the `DELIVERY_SHEET_EMAILS` GitHub Actions secret (comma-sepa
 so every run shares the sheet with them. **This is optional** — discovered leads now
 land directly in their in-app CRM, so the sheet is just a bonus.
 
-### 3. Them: sign in + connect Gmail
+### 3. Them: sign in + connect Gmail + Drive
 - They open your production URL, sign in (Google or email/password).
-- They go to **Integrations → "Connect a Gmail mailbox"**, pick their account, and grant
-  send permission. Done — they can now send.
+- **Integrations → "Connect a Gmail mailbox"** → pick their account, grant send. Done.
+- **Integrations → "Connect Google Drive"** → grant access. From then on, discovery
+  saves leads into their own **"Capricorn Leads"** spreadsheet in *their* Drive (the
+  app only touches files it creates). Until they connect Drive, sheets stay in your
+  Drive and are shared to them — nothing breaks either way.
 
 ### 4. Them: use it
 - **Get new leads** → pick a country → Run. Leads appear in **Companies** when it finishes.

@@ -323,7 +323,8 @@ def _try_append(sheets, spreadsheet_id: str,
 
 def export_leads_to_sheets(rows: List[Dict[str, Any]], title: str,
                            delivery_emails: Optional[List[str]] = None,
-                           spreadsheet_id: Optional[str] = None
+                           spreadsheet_id: Optional[str] = None,
+                           oauth: Optional[Dict[str, str]] = None
                            ) -> Dict[str, str]:
     """Build the two-tab deliverable spreadsheet and return its URL + id.
 
@@ -332,6 +333,9 @@ def export_leads_to_sheets(rows: List[Dict[str, Any]], title: str,
         title: spreadsheet title.
         delivery_emails: optional writer recipients; if empty, the link is made
             viewable by anyone with it.
+        oauth: optional {refresh_token, client_id, client_secret} — when given,
+            the sheet is created in THAT user's Drive (the client's connected
+            Drive) instead of the operator's env credentials.
 
     Returns:
         {"sheet_url": "<spreadsheetUrl>", "sheet_id": "<spreadsheetId>"}
@@ -339,7 +343,18 @@ def export_leads_to_sheets(rows: List[Dict[str, Any]], title: str,
     if not isinstance(rows, list):
         raise RuntimeError("rows must be a JSON array of lead-row dicts")
 
-    creds = _credentials()
+    if oauth and oauth.get("refresh_token"):
+        try:
+            from google.oauth2.credentials import Credentials  # type: ignore
+        except ImportError:
+            raise RuntimeError(
+                "google-auth not installed. Run: pip install -r requirements.txt")
+        creds = Credentials(
+            token=None, refresh_token=oauth["refresh_token"],
+            client_id=oauth.get("client_id"), client_secret=oauth.get("client_secret"),
+            token_uri="https://oauth2.googleapis.com/token", scopes=SCOPES)
+    else:
+        creds = _credentials()
     sheets, drive = _build_services(creds)
 
     # Append to the master spreadsheet when one is configured, so successive

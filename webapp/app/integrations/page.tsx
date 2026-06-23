@@ -28,11 +28,13 @@ export default async function IntegrationsPage({
   await requireAppUser();
   const sp = await searchParams;
   const supabase = await getServerSupabase();
-  const { data: integrations } = await supabase
+  const { data: rows } = await supabase
     .from('integrations')
     .select('id, provider, account_email, created_at, last_used_at, scope')
-    .eq('provider', 'gmail')
+    .in('provider', ['gmail', 'google_drive'])
     .order('created_at', { ascending: false });
+  const integrations = (rows ?? []).filter((r) => r.provider === 'gmail');
+  const driveIntegrations = (rows ?? []).filter((r) => r.provider === 'google_drive');
 
   return (
     <div className="max-w-2xl">
@@ -44,7 +46,8 @@ export default async function IntegrationsPage({
           Integrations
         </h1>
         <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-          Connect the Capricorn mailbox you want outbound emails sent from.
+          Connect the Gmail you send from, and the Google Drive where your lead
+          sheets are saved.
         </p>
       </div>
 
@@ -113,6 +116,61 @@ export default async function IntegrationsPage({
 
         <a href="/api/integrations/google/start" className="btn-primary inline-block">
           Connect a Gmail mailbox
+        </a>
+      </section>
+
+      <section className="card-soft p-6 space-y-5 mt-5">
+        <div>
+          <div className="flex items-baseline justify-between mb-1">
+            <h2 className="font-display text-[17px]" style={{ color: 'var(--navy-deep)' }}>
+              Google Drive
+            </h2>
+            <span
+              className="font-tabular text-[10.5px] uppercase tracking-wider"
+              style={{ color: 'var(--ink-4)' }}
+            >
+              own files only
+            </span>
+          </div>
+          <p className="text-[13px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+            Connect your Google Drive and new lead sheets are saved there in your
+            own &ldquo;Capricorn Leads&rdquo; spreadsheet. The app can only see and edit
+            files it creates; it never touches the rest of your Drive.
+          </p>
+        </div>
+
+        {driveIntegrations.length > 0 ? (
+          <div className="space-y-2.5">
+            {driveIntegrations.map((i) => (
+              <div
+                key={i.id}
+                className="rounded px-3.5 py-2.5"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
+              >
+                <div className="font-tabular text-[13px]" style={{ color: 'var(--ink)' }}>
+                  {i.account_email}
+                </div>
+                <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
+                  Connected {fmtDateTimeUTC(i.created_at)}
+                  {i.last_used_at && ` · last used ${fmtDateTimeUTC(i.last_used_at)}`}
+                </div>
+              </div>
+            ))}
+            <p className="text-[11.5px] italic" style={{ color: 'var(--ink-3)' }}>
+              The most recently connected Drive receives your lead sheets.
+            </p>
+          </div>
+        ) : (
+          <p className="text-[13px] italic" style={{ color: 'var(--ink-3)' }}>
+            No Drive connected — sheets are saved to the operator&rsquo;s Drive until you connect yours.
+          </p>
+        )}
+
+        <a
+          href="/api/integrations/google/start?provider=google_drive"
+          className="btn-primary inline-block"
+        >
+          Connect Google Drive
         </a>
       </section>
     </div>

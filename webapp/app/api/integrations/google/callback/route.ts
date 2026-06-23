@@ -27,9 +27,14 @@ export async function GET(req: NextRequest) {
 
   if (error) return redirectWith(req, 'error', error);
   if (!code) return redirectWith(req, 'error', 'missing_code');
-  if (!state || !stored || state !== stored) {
+  // The stored cookie is "<provider>:<state>" (legacy values are bare state).
+  const sep = (stored ?? '').indexOf(':');
+  const storedProvider = sep > 0 ? stored!.slice(0, sep) : '';
+  const expectedState = sep > 0 ? stored!.slice(sep + 1) : (stored ?? '');
+  if (!state || !expectedState || state !== expectedState) {
     return redirectWith(req, 'error', 'state_mismatch');
   }
+  const provider = storedProvider === 'google_drive' ? 'google_drive' : 'gmail';
 
   try {
     await requireAppUser();
@@ -49,7 +54,7 @@ export async function GET(req: NextRequest) {
     const svc = getServiceSupabase();
     const { error: upsertErr } = await svc.from('integrations').upsert(
       {
-        provider: 'gmail',
+        provider,
         account_email: accountEmail,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token ?? null,

@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { authUrlForGmailConnect } from '@/lib/gmail/oauth';
+import { authUrlForConnect, type ConnectProvider } from '@/lib/gmail/oauth';
 import { requireAppUser } from '@/lib/auth/allowlist';
 
 export const runtime = 'nodejs';
@@ -9,18 +9,24 @@ export const dynamic = 'force-dynamic';
 const STATE_COOKIE = 'capricorn_oauth_state';
 
 /**
- * GET /api/integrations/google/start
- * Build the Google OAuth consent URL, set a CSRF-state cookie, redirect.
- * The Capricorn client clicks this after signing into the app.
+ * GET /api/integrations/google/start?provider=gmail|google_drive
+ * Build the Google OAuth consent URL, set a CSRF-state cookie (carrying which
+ * provider is being connected), redirect. The client clicks this after sign-in.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requireAppUser();  // signed-in + allowlisted
+    const provider: ConnectProvider =
+      new URL(req.url).searchParams.get('provider') === 'google_drive'
+        ? 'google_drive'
+        : 'gmail';
     const state = crypto.randomUUID();
-    const url = authUrlForGmailConnect(state);
+    const url = authUrlForConnect(state, provider);
 
     const cookieStore = await cookies();
-    cookieStore.set(STATE_COOKIE, state, {
+    // Remember the provider alongside the CSRF state so the callback knows which
+    // integration to store.
+    cookieStore.set(STATE_COOKIE, `${provider}:${state}`, {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
