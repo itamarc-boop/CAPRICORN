@@ -362,12 +362,10 @@ function RunCard({ run, isAdmin }: { run: PipelineRun; isAdmin: boolean }) {
         </span>
       </div>
 
-      {/* Counts */}
-      {(run.discovered_count != null ||
-        run.qualified_count != null ||
-        run.leads_delivered != null) && (
+      {/* Counts (the raw "discovered" pool is the whole 600-company candidate
+          set under loop-to-target — confusing next to "1 company", so omit it). */}
+      {(run.qualified_count != null || run.leads_delivered != null) && (
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
-          {isAdmin && <Count label="Discovered" value={run.discovered_count} />}
           <Count label="Companies" value={run.qualified_count} />
           <Count label="Contacts" value={run.leads_delivered} />
         </div>
