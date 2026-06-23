@@ -575,8 +575,10 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     delivery_emails = [e.strip() for e in
                        (os.getenv("DELIVERY_SHEET_EMAILS") or "").split(",")
                        if e.strip()]
-    title = (f"Capricorn leads — {country_norm.title()} — "
-             f"{qualified_count} leads")
+    # Generic, stable name so the client always recognises the deliverable
+    # (not country-specific). Only used when creating a NEW sheet — runs append
+    # to MASTER_SHEET_ID when set, keeping that one sheet's existing name.
+    title = "Capricorn Leads"
     sheet = export_leads_to_sheets(rows, title, delivery_emails or None,
                                    spreadsheet_id=os.getenv("MASTER_SHEET_ID"))
     print(f"[sheet] {sheet.get('sheet_url')}")
