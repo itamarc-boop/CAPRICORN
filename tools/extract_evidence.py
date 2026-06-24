@@ -85,6 +85,14 @@ Asian supplier market. Verticals and example SKUs:
 - cleaning-supplies: cleaning cloths, mop heads, paper hand towels, jumbo
   rolls, garbage bags, household gloves"""
 
+# Product categories the client added via the in-app Products editor, passed by
+# run_pipeline (env CAPRICORN_EXTRA_PRODUCTS). Appended so the judge/evidence
+# also consider them for catalog-fit. Empty -> the proven catalog only.
+_extra_products = os.getenv("CAPRICORN_EXTRA_PRODUCTS", "").strip()
+if _extra_products:
+    CAPRICORN_CATALOG += ("\n- additional product categories the client now "
+                          f"sells: {_extra_products}")
+
 VERTICALS = ["foodservice-disposables", "pet-food", "cosmetics", "wipes",
              "membranes-geotextiles", "agriculture", "cleaning-supplies"]
 

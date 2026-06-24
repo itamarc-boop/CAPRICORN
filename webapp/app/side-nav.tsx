@@ -81,6 +81,15 @@ function IconPlug() {
   );
 }
 
+function IconTag() {
+  return (
+    <svg {...iconProps}>
+      <path d="M2.5 8.3V3.3a.8.8 0 0 1 .8-.8h5l5.4 5.4a.9.9 0 0 1 0 1.3l-4 4a.9.9 0 0 1-1.3 0L2.7 8.1z" />
+      <circle cx="5.4" cy="5.4" r="1" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS: ReadonlyArray<{
   href: string;
   label: string;
@@ -88,6 +97,7 @@ const NAV_ITEMS: ReadonlyArray<{
 }> = [
   { href: '/', label: 'Dashboard', icon: <IconHouse /> },
   { href: '/discover', label: 'Discover', icon: <IconCompass /> },
+  { href: '/products', label: 'Products', icon: <IconTag /> },
   { href: '/companies', label: 'Companies', icon: <IconBuilding /> },
   { href: '/drafts', label: 'Drafts', icon: <IconMail /> },
   { href: '/templates', label: 'Templates', icon: <IconFileText /> },

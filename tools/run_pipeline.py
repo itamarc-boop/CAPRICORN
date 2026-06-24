@@ -317,6 +317,33 @@ def _client_drive():
         return None, None, None
 
 
+def _load_products():
+    """The client's editable product catalog (discovery_products). Returns
+    (keywords, names): a flat deduped discovery-keyword list and the product
+    names. Returns (None, None) when unavailable, so callers fall back to the
+    hardcoded VERTICAL_KEYWORDS / CAPRICORN_CATALOG (no behaviour change)."""
+    sb = _supabase()
+    if not sb:
+        return None, None
+    try:
+        res = (sb.table("discovery_products").select("name, keywords")
+               .eq("active", True).order("sort").execute())
+        rows = res.data or []
+        if not rows:
+            return None, None
+        keywords: List[str] = []
+        for r in rows:
+            for k in (r.get("keywords") or "").split(","):
+                k = k.strip()
+                if k and k not in keywords:
+                    keywords.append(k)
+        names = [r["name"] for r in rows if r.get("name")]
+        return (keywords or None), names
+    except Exception as exc:  # noqa: BLE001 — fall back to the hardcoded lists
+        print(f"[products] load failed (using hardcoded catalog/keywords): {exc}")
+        return None, None
+
+
 def _process_batch(companies: List[Dict[str, Any]], *, work: Path,
                    env: Dict[str, str], is_uk: bool, tag: str, client) -> Any:
     """Run ONE batch through enrich -> research -> evidence -> score -> verify ->
@@ -435,6 +462,16 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
 
     client = ExploriumClient()
     keywords = ISRAEL_KEYWORDS if is_israel else VERTICAL_KEYWORDS
+    # Editable product catalog: the client's products (discovery_products) drive
+    # discovery keywords (non-Israel) AND the judge catalog. Falls back to the
+    # hardcoded lists when the table is empty/unreachable (no behaviour change).
+    product_keywords, product_names = _load_products()
+    if product_keywords and not is_israel:
+        keywords = product_keywords
+        print(f"[products] {len(keywords)} discovery keywords from "
+              f"{len(product_names)} editable products")
+    if product_names:
+        env["CAPRICORN_EXTRA_PRODUCTS"] = ", ".join(product_names)
     base_filters: Dict[str, Any] = {
         "country_code": {"values": [code]},
         "company_size": {"values": COMPANY_SIZE_BUCKETS},
