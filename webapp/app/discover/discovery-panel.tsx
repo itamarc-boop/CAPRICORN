@@ -407,6 +407,14 @@ function RunCard({ run, isAdmin }: { run: PipelineRun; isAdmin: boolean }) {
                   Review {reviewCount} new {reviewCount === 1 ? 'company' : 'companies'}
                 </Link>
               )}
+              {run.crm_synced === true && run.batch_label && reviewCount > 0 && (
+                <a
+                  href={`/api/export/xlsx?batch=${encodeURIComponent(run.batch_label)}`}
+                  className="btn-ghost text-[13px] inline-block"
+                >
+                  Download Excel
+                </a>
+              )}
               {run.sheet_url && (
                 <a
                   href={run.sheet_url}

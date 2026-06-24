@@ -72,6 +72,11 @@ export default async function CompaniesPage({
     batch: sp.batch ?? '',
   };
 
+  // "Download Excel" exports exactly the current URL filter.
+  const exportParams = new URLSearchParams();
+  for (const [k, v] of Object.entries(initialFilters)) if (v) exportParams.set(k, v);
+  const exportHref = `/api/export/xlsx${exportParams.toString() ? `?${exportParams.toString()}` : ''}`;
+
   return (
     <div>
       <div className="flex items-end justify-between mb-6 pb-5 rule-soft border-t-0 border-b border-[color:var(--line)]">
@@ -83,8 +88,13 @@ export default async function CompaniesPage({
             Every qualified company in the pipeline, with contacts and funnel status.
           </p>
         </div>
-        <div className="font-tabular text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-          {companies.length} total
+        <div className="flex items-center gap-3">
+          <a href={exportHref} className="btn-ghost text-[12.5px] whitespace-nowrap">
+            Download Excel
+          </a>
+          <span className="font-tabular text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+            {companies.length} total
+          </span>
         </div>
       </div>
       <CompaniesTable
