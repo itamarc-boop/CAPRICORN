@@ -1,5 +1,6 @@
 import { requireAppUser } from '@/lib/auth/allowlist';
 import { getServerSupabase } from '@/lib/supabase/server';
+import { isOutlookConfigured } from '@/lib/outlook/oauth';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,10 +32,12 @@ export default async function IntegrationsPage({
   const { data: rows } = await supabase
     .from('integrations')
     .select('id, provider, account_email, created_at, last_used_at, scope')
-    .in('provider', ['gmail', 'google_drive'])
+    .in('provider', ['gmail', 'google_drive', 'outlook'])
     .order('created_at', { ascending: false });
   const integrations = (rows ?? []).filter((r) => r.provider === 'gmail');
   const driveIntegrations = (rows ?? []).filter((r) => r.provider === 'google_drive');
+  const outlookIntegrations = (rows ?? []).filter((r) => r.provider === 'outlook');
+  const outlookEnabled = isOutlookConfigured();
 
   return (
     <div className="max-w-2xl">
@@ -118,6 +121,60 @@ export default async function IntegrationsPage({
           Connect a Gmail mailbox
         </a>
       </section>
+
+      {(outlookEnabled || outlookIntegrations.length > 0) && (
+        <section className="card-soft p-6 space-y-5 mt-5">
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <h2 className="font-display text-[17px]" style={{ color: 'var(--navy-deep)' }}>
+                Outlook
+              </h2>
+              <span
+                className="font-tabular text-[10.5px] uppercase tracking-wider"
+                style={{ color: 'var(--ink-4)' }}
+              >
+                send only
+              </span>
+            </div>
+            <p className="text-[13px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+              Send from your Microsoft 365 / Outlook mailbox. Recipients will see this
+              address as the sender. The app only requests permission to send mail; it
+              never reads your inbox.
+            </p>
+          </div>
+
+          {outlookIntegrations.length > 0 ? (
+            <div className="space-y-2.5">
+              {outlookIntegrations.map((i) => (
+                <div
+                  key={i.id}
+                  className="rounded px-3.5 py-2.5"
+                  style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
+                >
+                  <div className="font-tabular text-[13px]" style={{ color: 'var(--ink)' }}>
+                    {i.account_email}
+                  </div>
+                  <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
+                    Connected {fmtDateTimeUTC(i.created_at)}
+                    {i.last_used_at && ` · last used ${fmtDateTimeUTC(i.last_used_at)}`}
+                  </div>
+                </div>
+              ))}
+              <p className="text-[11.5px] italic" style={{ color: 'var(--ink-3)' }}>
+                The most recently connected mailbox is used for sends.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[13px] italic" style={{ color: 'var(--ink-3)' }}>
+              No Outlook mailbox connected yet.
+            </p>
+          )}
+
+          <a href="/api/integrations/microsoft/start" className="btn-primary inline-block">
+            Connect Outlook
+          </a>
+        </section>
+      )}
 
       <section className="card-soft p-6 space-y-5 mt-5">
         <div>

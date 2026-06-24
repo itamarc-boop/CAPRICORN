@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAppUser } from '@/lib/auth/allowlist';
 import { getServerSupabase, getServiceSupabase } from '@/lib/supabase/server';
-import { sendEmail } from '@/lib/gmail/send';
-import type { IntegrationRow } from '@/lib/gmail/oauth';
+import { getSendingIntegration, sendViaIntegration } from '@/lib/email/send';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,17 +59,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
-  // Pick the connected Gmail mailbox (latest by created_at).
-  const { data: integration, error: intErr } = await svc
-    .from('integrations')
-    .select('*')
-    .eq('provider', 'gmail')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (intErr || !integration) {
+  // Pick the connected mailbox (Gmail or Outlook, latest by created_at).
+  const integration = await getSendingIntegration(svc);
+  if (!integration) {
     return NextResponse.json(
-      { error: 'no_gmail_connected', message: 'Connect a Gmail mailbox at /integrations first.' },
+      {
+        error: 'no_mailbox_connected',
+        message: 'Connect a Gmail or Outlook mailbox at /integrations first.',
+      },
       { status: 409 }
     );
   }
@@ -92,7 +88,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // Send.
   let sent;
   try {
-    sent = await sendEmail(integration as IntegrationRow, {
+    sent = await sendViaIntegration(integration, {
       to: recipient,
       subject: draft.subject,
       body: draft.body,
@@ -103,7 +99,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       .from('email_drafts')
       .update({ status: 'failed', error: msg.slice(0, 500) })
       .eq('id', id);
-    return NextResponse.json({ error: 'gmail_send_failed', message: msg, detail: msg }, { status: 502 });
+    return NextResponse.json({ error: 'send_failed', message: msg, detail: msg }, { status: 502 });
   }
 
   // Mark sent + log.
@@ -126,7 +122,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     to_email: recipient,
     subject: draft.subject,
     body: draft.body,
-    gmail_message_id: sent.gmail_message_id,
+    gmail_message_id: sent.provider_message_id,
   });
 
   return NextResponse.json({ ok: true, from_email: sent.from_email });

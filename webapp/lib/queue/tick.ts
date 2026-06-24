@@ -17,8 +17,7 @@
  *      requeue with exponential backoff up to 3 attempts.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { sendEmail } from '@/lib/gmail/send';
-import type { IntegrationRow } from '@/lib/gmail/oauth';
+import { getSendingIntegration, sendViaIntegration } from '@/lib/email/send';
 import type { Contact, EmailDraft } from '@/lib/db/types';
 
 export type TickResult = {
@@ -96,14 +95,7 @@ export async function runTick(svc: SupabaseClient): Promise<TickResult> {
       .maybeSingle();
     const contact = contactRow as Pick<Contact, 'id' | 'full_name' | 'email'> | null;
 
-    const { data: integrationRow } = await svc
-      .from('integrations')
-      .select('*')
-      .eq('provider', 'gmail')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const integration = integrationRow as IntegrationRow | null;
+    const integration = await getSendingIntegration(svc);
 
     if (!contact || !contact.email || contact.email.trim() === '') {
       await svc
@@ -123,12 +115,12 @@ export async function runTick(svc: SupabaseClient): Promise<TickResult> {
           scheduled_at: new Date(Date.now() + NO_GMAIL_RETRY_MS).toISOString(),
         })
         .eq('id', draft.id);
-      return { ok: true, action: 'requeued', detail: 'no gmail connected' };
+      return { ok: true, action: 'requeued', detail: 'no mailbox connected' };
     }
 
     // ── d. SEND.
     try {
-      const result = await sendEmail(integration, {
+      const result = await sendViaIntegration(integration, {
         to: contact.email,
         subject: draft.subject,
         body: draft.body,
@@ -151,7 +143,7 @@ export async function runTick(svc: SupabaseClient): Promise<TickResult> {
         to_email: contact.email,
         subject: draft.subject,
         body: draft.body,
-        gmail_message_id: result.gmail_message_id,
+        gmail_message_id: result.provider_message_id,
       });
       if (logErr) {
         // The email WAS sent — keep the draft 'sent', note the log failure,
@@ -219,7 +211,7 @@ async function handleSendError(
       .update({
         status: 'failed',
         error:
-          'Gmail authorization expired (invalid_grant) - reconnect at /integrations, then requeue',
+          'Mailbox authorization expired (invalid_grant) - reconnect at /integrations, then requeue',
       })
       .eq('id', draft.id);
     return { ok: true, action: 'failed', detail: 'gmail auth' };
