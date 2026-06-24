@@ -132,7 +132,7 @@ export default async function CompanyDetailPage(
       .order('sent_at', { ascending: false }),
     supabase
       .from('email_drafts')
-      .select('id, contact_id, subject, status, language, created_at, sent_at, error')
+      .select('id, contact_id, to_email, subject, status, language, created_at, sent_at, error')
       .eq('company_id', id)
       .order('created_at', { ascending: false }),
   ]);

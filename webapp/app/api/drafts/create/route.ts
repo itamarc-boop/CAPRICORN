@@ -10,9 +10,12 @@ type Body = {
   contact_id?: unknown;
   template_id?: unknown;
   language?: unknown;
+  to_email?: unknown;
   subject?: unknown;
   body?: unknown;
 };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * POST /api/drafts/create
@@ -41,9 +44,18 @@ export async function POST(req: NextRequest) {
   const language = typeof payload.language === 'string' && payload.language ? payload.language : 'en';
   const subject = typeof payload.subject === 'string' ? payload.subject : '';
   const body = typeof payload.body === 'string' ? payload.body : '';
+  // Optional override recipient. Null => send to the contact's email.
+  const to_email_raw = typeof payload.to_email === 'string' ? payload.to_email.trim() : '';
+  const to_email = to_email_raw || null;
 
   if (!company_id || !contact_id || !subject.trim() || !body.trim()) {
     return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
+  }
+  if (to_email && !EMAIL_RE.test(to_email)) {
+    return NextResponse.json(
+      { error: 'invalid_email', detail: 'That send-to address is not a valid email.' },
+      { status: 400 }
+    );
   }
 
   const supabase = await getServerSupabase();
@@ -57,6 +69,7 @@ export async function POST(req: NextRequest) {
       contact_id,
       template_id,
       language,
+      to_email,
       subject,
       body,
       status: 'draft',

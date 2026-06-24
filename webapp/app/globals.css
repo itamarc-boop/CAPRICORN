@@ -44,6 +44,11 @@
   --info-bg:     #E2ECF1;
   --muted-ink:   #6E6A60;
   --muted-bg:    #ECE7DA;
+
+  /* Destructive actions (disconnect, delete) — muted oxblood, not Tailwind red.
+     Stays on the warm editorial palette; AA on --surface and --surface-2. */
+  --danger-ink:  #8C3B2E;
+  --danger-bg:   #F1E1DB;
 }
 
 /* Make tailwind's bg-white, text classes feel less harsh by default
@@ -61,6 +66,21 @@ body {
   color: var(--ink);
   font-size: 14.5px;
   line-height: 1.55;
+  /* Native checkboxes, radios, range thumbs pick up the brand navy instead of
+     the browser-default blue. */
+  accent-color: var(--navy);
+  text-rendering: optimizeLegibility;
+}
+
+/* Editorial text selection — navy tint, not the browser default. */
+::selection {
+  background: color-mix(in oklab, var(--navy) 20%, transparent);
+  color: var(--navy-deep);
+}
+
+/* Even line lengths on display headings. */
+h1, h2, h3, .font-display {
+  text-wrap: balance;
 }
 
 /* Display headings — serif gives the dashboard editorial gravity. */
@@ -167,6 +187,21 @@ input:focus, textarea:focus, select:focus {
   background: var(--surface-2);
   border-color: color-mix(in oklab, var(--navy) 30%, var(--line-strong));
 }
+
+/* Subtle destructive text button — disconnect, delete. Quiet by default,
+   oxblood on hover, so it never competes with primary actions. */
+.btn-unlink {
+  color: var(--ink-3);
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.2;
+  transition: color 120ms ease;
+  cursor: pointer;
+}
+.btn-unlink:hover:not(:disabled) {
+  color: var(--danger-ink);
+}
+.btn-unlink:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Table niceties. */
 .tbl thead th {

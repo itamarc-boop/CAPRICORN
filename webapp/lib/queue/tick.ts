@@ -97,12 +97,15 @@ export async function runTick(svc: SupabaseClient): Promise<TickResult> {
 
     const integration = await getSendingIntegration(svc);
 
-    if (!contact || !contact.email || contact.email.trim() === '') {
+    // A custom to_email on the draft overrides the contact's email.
+    const override = (draft.to_email ?? '').trim();
+    const recipient = override || (contact?.email ?? '').trim();
+    if (!recipient) {
       await svc
         .from('email_drafts')
-        .update({ status: 'failed', error: 'contact has no email' })
+        .update({ status: 'failed', error: 'no send-to address (contact has no email)' })
         .eq('id', draft.id);
-      return { ok: true, action: 'failed', detail: 'contact has no email' };
+      return { ok: true, action: 'failed', detail: 'no recipient' };
     }
 
     if (!integration) {
@@ -121,7 +124,7 @@ export async function runTick(svc: SupabaseClient): Promise<TickResult> {
     // ── d. SEND.
     try {
       const result = await sendViaIntegration(integration, {
-        to: contact.email,
+        to: recipient,
         subject: draft.subject,
         body: draft.body,
       });
@@ -140,7 +143,7 @@ export async function runTick(svc: SupabaseClient): Promise<TickResult> {
         template_id: draft.template_id,
         sent_by: draft.approved_by ?? draft.created_by,
         from_email: result.from_email,
-        to_email: contact.email,
+        to_email: recipient,
         subject: draft.subject,
         body: draft.body,
         gmail_message_id: result.provider_message_id,
@@ -162,11 +165,11 @@ export async function runTick(svc: SupabaseClient): Promise<TickResult> {
         return {
           ok: true,
           action: 'sent',
-          detail: `${contact.email} (email_log insert failed: ${logErr.message})`.slice(0, 200),
+          detail: `${recipient} (email_log insert failed: ${logErr.message})`.slice(0, 200),
         };
       }
 
-      return { ok: true, action: 'sent', detail: contact.email };
+      return { ok: true, action: 'sent', detail: recipient };
     } catch (e) {
       // ── e. Classify the send error.
       const message = e instanceof Error ? e.message : String(e);

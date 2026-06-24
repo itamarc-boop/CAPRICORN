@@ -27,6 +27,7 @@ import {
 export type PanelDraft = {
   id: string;
   contact_id: string | null;
+  to_email: string | null;
   subject: string;
   status: DraftStatus;
   language: string;
@@ -34,6 +35,8 @@ export type PanelDraft = {
   sent_at: string | null;
   error: string | null;
 };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function fmtDate(iso: string | null): string {
@@ -64,6 +67,9 @@ export default function EmailPanel({
     contacts[0] ??
     null;
   const [contactId, setContactId] = useState<string>(defaultContact?.id ?? '');
+  // Editable recipient: defaults to the selected contact's email, but the user
+  // can type any address to send somewhere else.
+  const [toEmail, setToEmail] = useState<string>(defaultContact?.email ?? '');
   // Default to the first template (not Blank) so "Write with AI" is usable
   // immediately and the body starts from a real draft. Switch to Blank to compose
   // from scratch.
@@ -89,11 +95,17 @@ export default function EmailPanel({
       });
   }, []);
 
+  // When the chosen contact changes, refill the send-to with that contact's
+  // email (the user can still override it afterward).
+  useEffect(() => {
+    setToEmail(selectedContact?.email ?? '');
+  }, [selectedContact?.email]);
+
   const refetch = useCallback(async () => {
     const supabase = getBrowserSupabase();
     const { data } = await supabase
       .from('email_drafts')
-      .select('id, contact_id, subject, status, language, created_at, sent_at, error')
+      .select('id, contact_id, to_email, subject, status, language, created_at, sent_at, error')
       .eq('company_id', company.id)
       .order('created_at', { ascending: false });
     if (data) setDrafts(data as PanelDraft[]);
@@ -146,9 +158,10 @@ export default function EmailPanel({
     if (value === '') setRenderedFor('');
   }
 
-  const canSave = Boolean(contactId) && subject.trim().length > 0 && body.trim().length > 0;
-  const canAI = Boolean(contactId && templateId && selectedContact?.email) && busy === null;
-  const showSaveHint = selectedContact !== null && !selectedContact.email;
+  const toEmailTrim = toEmail.trim();
+  const validTo = EMAIL_RE.test(toEmailTrim);
+  const canSave = Boolean(contactId) && validTo && subject.trim().length > 0 && body.trim().length > 0;
+  const canAI = Boolean(contactId && templateId) && validTo && busy === null;
 
   async function saveDraft() {
     if (!canSave || busy) return;
@@ -163,6 +176,7 @@ export default function EmailPanel({
           contact_id: contactId,
           template_id: tpl?.id ?? null,
           language,
+          to_email: toEmailTrim,
           subject,
           body,
         }),
@@ -189,7 +203,12 @@ export default function EmailPanel({
       const res = await fetch('/api/drafts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_id: templateId, contact_ids: [contactId], language }),
+        body: JSON.stringify({
+          template_id: templateId,
+          contact_ids: [contactId],
+          language,
+          to_email: toEmailTrim,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         results?: Array<{ draft_id?: string; error?: string }>;
@@ -263,10 +282,10 @@ export default function EmailPanel({
           kind: 'warn',
           text:
             data.message ||
-            (data.error === 'no_gmail_connected'
-              ? 'Connect a Gmail mailbox first.'
+            (data.error === 'no_mailbox_connected'
+              ? 'Connect a Gmail or Outlook mailbox first.'
               : data.error === 'no_recipient'
-                ? 'This contact has no email. Add one first.'
+                ? 'Add a send-to address first.'
                 : 'Could not send.'),
         });
       } else {
@@ -304,11 +323,22 @@ export default function EmailPanel({
                 </option>
               ))}
             </select>
-            {showSaveHint && (
-              <p className="mt-1 text-[11.5px]" style={{ color: 'var(--ink-4)' }}>
-                This contact has no email — add one on the contact to send.
-              </p>
-            )}
+          </div>
+
+          <div>
+            <FieldLabel htmlFor="compose-to">Send to</FieldLabel>
+            <input
+              id="compose-to"
+              type="email"
+              value={toEmail}
+              onChange={(e) => setToEmail(e.target.value)}
+              placeholder="name@company.com"
+              className="w-full rounded px-2.5 py-1.5 text-[13px] border font-tabular"
+              style={{ borderColor: validTo || toEmailTrim === '' ? 'var(--line-strong)' : 'var(--danger-ink)' }}
+            />
+            <p className="mt-1 text-[11.5px]" style={{ color: 'var(--ink-4)' }}>
+              Defaults to the selected contact. Change it to send to any address.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
@@ -383,8 +413,8 @@ export default function EmailPanel({
               title={
                 !templateId
                   ? 'Pick a template for AI to write from'
-                  : !selectedContact?.email
-                    ? 'The contact needs an email'
+                  : !validTo
+                    ? 'Enter a valid send-to address'
                     : undefined
               }
             >
@@ -398,8 +428,8 @@ export default function EmailPanel({
           )}
           {templates.length > 0 && !canAI && busy === null && (
             <p className="text-[11.5px]" style={{ color: 'var(--ink-4)' }}>
-              {!selectedContact?.email
-                ? 'Add an email to the selected contact to write with AI.'
+              {!validTo
+                ? 'Enter a valid send-to address to write with AI.'
                 : !templateId
                   ? 'Pick a template to write with AI.'
                   : ''}
@@ -441,7 +471,10 @@ export default function EmailPanel({
                         {d.subject || '(no subject)'}
                       </div>
                       <div className="text-[11.5px] mt-0.5 truncate" style={{ color: 'var(--ink-3)' }}>
-                        {contact?.full_name ?? contact?.email ?? 'contact'} · {d.language.toUpperCase()} ·{' '}
+                        {d.to_email && d.to_email !== contact?.email
+                          ? `to ${d.to_email}`
+                          : contact?.full_name ?? contact?.email ?? 'contact'}{' '}
+                        · {d.language.toUpperCase()} ·{' '}
                         {d.status === 'sent' ? `sent ${fmtDate(d.sent_at)}` : fmtDate(d.created_at)}
                       </div>
                     </div>

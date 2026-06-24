@@ -28,7 +28,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // Load the draft with its recipient.
   const { data: draft, error: draftErr } = await svc
     .from('email_drafts')
-    .select('id, company_id, contact_id, template_id, subject, body, status, contacts(email)')
+    .select('id, company_id, contact_id, template_id, to_email, subject, body, status, contacts(email)')
     .eq('id', id)
     .maybeSingle();
   if (draftErr) {
@@ -49,12 +49,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     | { email: string | null }
     | { email: string | null }[]
     | null;
-  const recipient = Array.isArray(contactRel)
+  const contactEmail = Array.isArray(contactRel)
     ? contactRel[0]?.email ?? null
     : contactRel?.email ?? null;
+  // A custom to_email overrides the contact's email when set.
+  const override =
+    typeof draft.to_email === 'string' && draft.to_email.trim() ? draft.to_email.trim() : null;
+  const recipient = override ?? contactEmail;
   if (!recipient) {
     return NextResponse.json(
-      { error: 'no_recipient', message: 'This contact has no email. Add one first.' },
+      { error: 'no_recipient', message: 'No send-to address. Add the contact email or type one.' },
       { status: 422 }
     );
   }

@@ -21,6 +21,36 @@ function fmtDateTimeUTC(iso: string | null): string {
   return `${MONTHS[mi] ?? ''} ${day}, ${year}, ${hh}:${mm} UTC`;
 }
 
+/** One connected mailbox/Drive row, with a Disconnect action. */
+function ConnectedRow({
+  i,
+}: {
+  i: { id: string; account_email: string; created_at: string; last_used_at: string | null };
+}) {
+  return (
+    <div
+      className="rounded px-3.5 py-2.5 flex items-center justify-between gap-3"
+      style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
+    >
+      <div className="min-w-0">
+        <div className="font-tabular text-[13px] truncate" style={{ color: 'var(--ink)' }}>
+          {i.account_email}
+        </div>
+        <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
+          Connected {fmtDateTimeUTC(i.created_at)}
+          {i.last_used_at && ` · last used ${fmtDateTimeUTC(i.last_used_at)}`}
+        </div>
+      </div>
+      <form action="/api/integrations/disconnect" method="post" className="shrink-0">
+        <input type="hidden" name="id" value={i.id} />
+        <button type="submit" className="btn-unlink">
+          Disconnect
+        </button>
+      </form>
+    </div>
+  );
+}
+
 type SearchParams = { status?: string; detail?: string };
 
 export default async function IntegrationsPage({
@@ -59,7 +89,13 @@ export default async function IntegrationsPage({
           className="mb-5 rounded px-3.5 py-2.5 text-[13px]"
           style={{ background: 'var(--ok-bg)', color: 'var(--ok-ink)' }}
         >
-          Connected: <span className="font-tabular">{sp.detail}</span>
+          {sp.detail === 'disconnected' ? (
+            'Disconnected.'
+          ) : (
+            <>
+              Connected: <span className="font-tabular">{sp.detail}</span>
+            </>
+          )}
         </div>
       )}
       {sp?.status === 'error' && (
@@ -67,7 +103,13 @@ export default async function IntegrationsPage({
           className="mb-5 rounded px-3.5 py-2.5 text-[13px]"
           style={{ background: 'var(--warn-bg)', color: 'var(--warn-ink)' }}
         >
-          Could not connect: {sp.detail}
+          {sp.detail === 'outlook_not_enabled'
+            ? "Outlook isn't enabled yet. Ask your operator to add the Microsoft app credentials."
+            : sp.detail === 'state_mismatch'
+              ? 'That sign-in attempt expired. Please try connecting again.'
+              : sp.detail?.startsWith('disconnect_failed')
+                ? 'Could not disconnect. Please try again.'
+                : `Could not connect: ${sp.detail}`}
         </div>
       )}
 
@@ -92,20 +134,8 @@ export default async function IntegrationsPage({
 
         {integrations && integrations.length > 0 ? (
           <div className="space-y-2.5">
-            {integrations.map(i => (
-              <div
-                key={i.id}
-                className="rounded px-3.5 py-2.5"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
-              >
-                <div className="font-tabular text-[13px]" style={{ color: 'var(--ink)' }}>
-                  {i.account_email}
-                </div>
-                <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-                  Connected {fmtDateTimeUTC(i.created_at)}
-                  {i.last_used_at && ` · last used ${fmtDateTimeUTC(i.last_used_at)}`}
-                </div>
-              </div>
+            {integrations.map((i) => (
+              <ConnectedRow key={i.id} i={i} />
             ))}
             <p className="text-[11.5px] italic" style={{ color: 'var(--ink-3)' }}>
               The most recently connected mailbox is used for sends.
@@ -146,19 +176,7 @@ export default async function IntegrationsPage({
           {outlookIntegrations.length > 0 ? (
             <div className="space-y-2.5">
               {outlookIntegrations.map((i) => (
-                <div
-                  key={i.id}
-                  className="rounded px-3.5 py-2.5"
-                  style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
-                >
-                  <div className="font-tabular text-[13px]" style={{ color: 'var(--ink)' }}>
-                    {i.account_email}
-                  </div>
-                  <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-                    Connected {fmtDateTimeUTC(i.created_at)}
-                    {i.last_used_at && ` · last used ${fmtDateTimeUTC(i.last_used_at)}`}
-                  </div>
-                </div>
+                <ConnectedRow key={i.id} i={i} />
               ))}
               <p className="text-[11.5px] italic" style={{ color: 'var(--ink-3)' }}>
                 The most recently connected mailbox is used for sends.
@@ -199,19 +217,7 @@ export default async function IntegrationsPage({
         {driveIntegrations.length > 0 ? (
           <div className="space-y-2.5">
             {driveIntegrations.map((i) => (
-              <div
-                key={i.id}
-                className="rounded px-3.5 py-2.5"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
-              >
-                <div className="font-tabular text-[13px]" style={{ color: 'var(--ink)' }}>
-                  {i.account_email}
-                </div>
-                <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-                  Connected {fmtDateTimeUTC(i.created_at)}
-                  {i.last_used_at && ` · last used ${fmtDateTimeUTC(i.last_used_at)}`}
-                </div>
-              </div>
+              <ConnectedRow key={i.id} i={i} />
             ))}
             <p className="text-[11.5px] italic" style={{ color: 'var(--ink-3)' }}>
               The most recently connected Drive receives your lead sheets.

@@ -67,6 +67,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
   }
 
+  // Optional override recipient (single-contact use from the dossier). Null =>
+  // send to each contact's own email.
+  const toEmailRaw = typeof payload.to_email === 'string' ? payload.to_email.trim() : '';
+  if (toEmailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmailRaw)) {
+    return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
+  }
+  const toEmail = toEmailRaw || null;
+
   // Cap at 10 — extras are silently ignored.
   const contactIds = contactIdsInput.slice(0, MAX_CONTACTS_PER_BATCH);
 
@@ -120,7 +128,7 @@ export async function POST(req: NextRequest) {
   const results: GenerateResult[] = await runPool(contactIds, CONCURRENCY, async (contactId) => {
     const contact = contactById.get(contactId);
     if (!contact) return { contact_id: contactId, error: 'contact_not_found' };
-    if (!contact.email) return { contact_id: contactId, error: 'no_email' };
+    if (!contact.email && !toEmail) return { contact_id: contactId, error: 'no_email' };
     const company = contact.companies;
     if (!company) return { contact_id: contactId, error: 'company_not_found' };
 
@@ -140,6 +148,7 @@ export async function POST(req: NextRequest) {
           template_id: template.id,
           generation_batch_id: generationBatchId,
           language,
+          to_email: toEmail,
           subject: draft.subject,
           body: draft.body,
           status: 'draft',

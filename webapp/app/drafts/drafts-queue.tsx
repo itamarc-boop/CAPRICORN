@@ -248,6 +248,21 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
     await refetch();
   }
 
+  async function removeDraft(id: string, label: string) {
+    if (!confirm(`Delete this draft to ${label}? This cannot be undone.`)) return;
+    setBusyId(id);
+    setRowError(null);
+    const supabase = getBrowserSupabase();
+    const { error } = await supabase.from('email_drafts').delete().eq('id', id);
+    setBusyId(null);
+    if (error) {
+      setRowError(`Delete failed: ${error.message}`);
+      return;
+    }
+    setExpandedId(null);
+    setDrafts(prev => prev.filter(x => x.id !== id));
+  }
+
   async function approveAllShown() {
     const ids = visible.filter(d => d.status === 'draft').map(d => d.id);
     if (ids.length === 0) return;
@@ -703,6 +718,24 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                             {d.status === 'sent' && (
                               <div className="text-[12px]" style={{ color: 'var(--ok-ink)' }}>
                                 Sent {fmtDateTime(d.sent_at)}
+                              </div>
+                            )}
+
+                            {d.status !== 'sending' && (
+                              <div className="pt-2 border-t" style={{ borderColor: 'var(--line)' }}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void removeDraft(
+                                      d.id,
+                                      d.contacts?.full_name || d.contacts?.email || 'this contact'
+                                    )
+                                  }
+                                  disabled={busyId === d.id}
+                                  className="btn-unlink"
+                                >
+                                  Delete draft
+                                </button>
                               </div>
                             )}
 

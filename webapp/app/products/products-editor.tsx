@@ -104,8 +104,8 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
     <div>
       {error && (
         <div
-          className="mb-4 rounded-md px-3 py-2 text-[12.5px]"
-          style={{ background: 'var(--rose-50, #fef2f2)', color: 'var(--rose-700, #b91c1c)' }}
+          className="mb-4 rounded px-3 py-2 text-[12.5px]"
+          style={{ background: 'var(--warn-bg)', color: 'var(--warn-ink)' }}
         >
           {error}
         </div>
@@ -190,8 +190,7 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
                 <button
                   type="button"
                   onClick={() => removeProduct(p.id, p.name)}
-                  className="text-[12px]"
-                  style={{ color: 'var(--rose-700, #b91c1c)' }}
+                  className="btn-unlink"
                 >
                   Remove
                 </button>

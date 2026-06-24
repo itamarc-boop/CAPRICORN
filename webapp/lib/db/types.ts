@@ -127,6 +127,7 @@ export type EmailDraft = {
   template_id: string | null;
   generation_batch_id: string | null;
   language: string;
+  to_email: string | null;
   subject: string;
   body: string;
   status: DraftStatus;

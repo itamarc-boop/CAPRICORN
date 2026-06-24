@@ -98,18 +98,19 @@ export default function TemplatesEditor({ initial }: { initial: Template[] }) {
     setMessage('Saved');
   }
 
-  async function remove() {
-    if (!draft?.id) return;
-    if (!confirm(`Delete template "${draft.name}"?`)) return;
+  async function deleteTemplate(id: string, name: string) {
+    if (!confirm(`Delete template "${name}"? This cannot be undone.`)) return;
     const supabase = getBrowserSupabase();
-    const { error } = await supabase.from('templates').delete().eq('id', draft.id);
+    const { error } = await supabase.from('templates').delete().eq('id', id);
     if (error) {
       setMessage(`Error: ${error.message}`);
       return;
     }
-    setTemplates(prev => prev.filter(t => t.id !== draft.id));
-    setSelectedId(null);
-    setDraft(null);
+    setTemplates(prev => prev.filter(t => t.id !== id));
+    if (selectedId === id) {
+      setSelectedId(null);
+      setDraft(null);
+    }
     setMessage('Deleted');
   }
 
@@ -121,18 +122,26 @@ export default function TemplatesEditor({ initial }: { initial: Template[] }) {
         </button>
         <ul className="card-soft divide-y" style={{ borderColor: 'var(--line)' }}>
           {templates.map(t => (
-            <li key={t.id}>
+            <li key={t.id} className="flex items-stretch">
               <button
                 onClick={() => select(t.id)}
-                className="w-full text-left px-3.5 py-2.5 text-[13px] transition-colors"
+                className="flex-1 min-w-0 text-left px-3.5 py-2.5 text-[13px] truncate transition-colors"
                 style={{
                   background: selectedId === t.id ? 'var(--surface-2)' : 'transparent',
                   color: 'var(--ink)',
                   fontWeight: selectedId === t.id ? 500 : 400,
-                  borderColor: 'var(--line-soft)',
                 }}
               >
                 {t.name}
+              </button>
+              <button
+                onClick={() => void deleteTemplate(t.id, t.name)}
+                title={`Delete ${t.name}`}
+                aria-label={`Delete template ${t.name}`}
+                className="btn-unlink px-3 shrink-0"
+                style={{ background: selectedId === t.id ? 'var(--surface-2)' : 'transparent' }}
+              >
+                ✕
               </button>
             </li>
           ))}
@@ -242,11 +251,14 @@ export default function TemplatesEditor({ initial }: { initial: Template[] }) {
               </button>
               {draft.id && (
                 <button
-                  onClick={remove}
+                  onClick={() => void deleteTemplate(draft.id, draft.name)}
                   className="btn-ghost"
-                  style={{ color: 'var(--warn-ink)', borderColor: 'var(--warn-bg)' }}
+                  style={{
+                    color: 'var(--danger-ink)',
+                    borderColor: 'color-mix(in oklab, var(--danger-ink) 28%, var(--line-strong))',
+                  }}
                 >
-                  Delete
+                  Delete template
                 </button>
               )}
               {message && (
