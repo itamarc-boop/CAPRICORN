@@ -106,18 +106,34 @@ PROSPECT_JOB_DEPARTMENTS = [
 
 # Funnel ratios (SOP: discover ~target x4-6, gates+scoring drop most). Capped to
 # keep credit spend bounded on a single run.
-DISCOVER_MULTIPLIER = 6
 ENRICH_MULTIPLIER = 4
-MAX_DISCOVER = 600
 MAX_ENRICH = 250
 
 # Loop-to-target: keep pulling NEW companies through the funnel in batches until
 # the requested number of leads is delivered, the discoverable pool is exhausted,
-# or this many companies have been enriched (the per-run cost ceiling). Discovery
-# is free; enrichment is the cost driver, so we cap on companies enriched.
-# Override per run with the DISCOVER_ENRICH_CAP env var.
+# or this many companies have been enriched (the per-run cost ceiling).
+# COST NOTE: BOTH discovery (/businesses) and the prospect search (/prospects)
+# are billed PER RECORD returned — they are NOT free (assuming they were, and
+# fetching 600 companies up front to use ~15, was the #1 cost driver). So we
+# (a) fetch businesses one page at a time, only when a round needs more, and stop
+# the instant the target is met, and (b) fetch only a few prospect candidates per
+# delivered company. Enrichment is the per-company cost; we cap the run on
+# companies enriched. Override with the DISCOVER_ENRICH_CAP env var.
 DELIVER_ENRICH_CAP = 120
 MIN_BATCH = 15
+
+# Prospect search is billed per record; pick_prospects keeps <=2 contacts per
+# company, so a few candidates each is plenty. size = companies * PER_COMPANY,
+# capped by PROSPECT_FETCH_CAP.
+PROSPECT_PER_COMPANY = 6
+PROSPECT_FETCH_CAP = 200
+
+# HARD per-run safety ceilings (belt-and-suspenders over the lazy funnel) so a
+# single run — or a client clicking Run with a big target — can never blow the
+# credit budget again. Both overridable by env (MAX_DISCOVER_FETCH /
+# RUN_MAX_TARGET).
+MAX_DISCOVER_FETCH = 200   # max business records discovery may fetch per run
+RUN_MAX_TARGET = 25        # clamp the requested target before any spend
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +458,12 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     # Tag every synced company with this run's batch so the webapp can filter
     # /companies?batch=<batch_label>. Mirrors route.ts's row insert exactly.
     batch_label = "discovery_" + _slug(country_norm)
+    # Clamp the target BEFORE any spend so a client can never request a huge
+    # (expensive) run from the webapp.
+    max_target = int(os.getenv("RUN_MAX_TARGET", str(RUN_MAX_TARGET)))
+    if target > max_target:
+        print(f"[budget] target {target} clamped to {max_target} (RUN_MAX_TARGET)")
+    target = max(1, min(target, max_target))
     print(f"Country '{country_norm}' -> {code}  (target {target} qualified, "
           f"batch_label={batch_label})")
 
@@ -456,6 +478,8 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     # Total spend across rounds is bounded by the enrich cap below.
     enrich_cap = int(os.getenv("DISCOVER_ENRICH_CAP", str(DELIVER_ENRICH_CAP)))
     batch_size = max(target * ENRICH_MULTIPLIER, MIN_BATCH)
+    # Each discovery page ~= one round's need, so we rarely over-fetch (<=100).
+    discover_page_size = min(100, max(batch_size, 20))
     env["EVIDENCE_EXTRACT_USD_BUDGET"] = f"{max(1.5, batch_size * 0.06):.2f}"
     env["BDR_JUDGE_USD_BUDGET"] = f"{max(2.5, batch_size * 0.15):.2f}"
     env["WEB_VERIFY_USD_BUDGET"] = f"{max(1.0, batch_size * 0.06):.2f}"
@@ -488,47 +512,60 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
     except Exception as exc:  # noqa: BLE001 — sizing must not fail the run
         print(f"[stats] sizing failed (continuing): {exc}")
 
-    # --- 2. discover a large candidate pool (FREE — only enrichment costs) --
+    # HARD per-run discovery ceiling (business records fetched). Bounds the worst
+    # case so one run can never run away on credits; also never page past the
+    # free market-size estimate. Override with MAX_DISCOVER_FETCH.
+    discover_fetch_cap = int(os.getenv("MAX_DISCOVER_FETCH", str(MAX_DISCOVER_FETCH)))
+    if discovered_estimate:
+        discover_fetch_cap = min(discover_fetch_cap, discovered_estimate)
+    print(f"[budget] discovery fetch ceiling: {discover_fetch_cap} records")
+
+    # --- 2. discover + enrich + judge LAZILY until the target is met ---------
+    # COST: /businesses is billed PER RECORD returned, so we NEVER fetch the
+    # whole pool up front (pulling 600 to use ~15 was the #1 cost driver). We pull
+    # ONE page only when a round needs more companies, dedup it against prior
+    # runs, and stop the instant the target is met. A target-5 run now fetches
+    # ~1-2 pages, not 600.
     reporter.update(stage="discovering companies")
-    discovered = client.fetch_businesses(base_filters, size=MAX_DISCOVER,
-                                         page_size=100)
-    print(f"[discover] fetched {len(discovered)} businesses (candidate pool)")
-    reporter.update(discovered_count=len(discovered))
-    if not discovered:
-        raise RuntimeError(
-            f"discovery returned 0 businesses for {country_norm} ({code}) — "
-            "check keywords/filters/credits before retrying.")
-
-    # --- 3. drop companies tried in prior runs (persistent seen store) ------
     seen_ids = _load_seen(code)
-    pool = [c for c in discovered
-            if c.get("business_id") and c["business_id"] not in seen_ids]
-    print(f"[dedup] {len(pool)} new companies "
-          f"({len(discovered) - len(pool)} already tried in prior runs)")
-    if not pool:
-        raise RuntimeError(
-            "every discovered company was already tried in prior runs — nothing "
-            "new to enrich. Try a different market or broaden the keywords.")
 
-    # --- LOOP: enrich + judge in batches until target met / cap hit ---------
-    # Keep pulling NEW companies through the full funnel, accumulating qualified
-    # leads, until we deliver the target, exhaust the pool, or reach the enrich
-    # cap. Every company enriched (qualified or rejected) is recorded as seen so
-    # future runs skip it.
     delivered: List[Dict[str, Any]] = []
+    buffer: List[Dict[str, Any]] = []   # new (post-dedup) companies awaiting a round
+    discovered_total = 0                 # records actually fetched (~= credits spent)
+    skipped_seen = 0
     enriched_total = 0
-    cursor = 0
     round_idx = 0
-    while (len(delivered) < target and cursor < len(pool)
-           and enriched_total < enrich_cap):
+    page = 1
+    exhausted = False
+
+    while len(delivered) < target and enriched_total < enrich_cap:
+        # Top up the buffer to one batch, fetching pages on demand (lazy = cheap),
+        # but never past the hard discovery ceiling.
+        while (len(buffer) < batch_size and not exhausted
+               and discovered_total < discover_fetch_cap):
+            data = client.fetch_businesses_page(
+                base_filters, page=page, page_size=discover_page_size)
+            page += 1
+            discovered_total += len(data)
+            if len(data) < discover_page_size:
+                exhausted = True
+            fresh = [c for c in data
+                     if c.get("business_id") and c["business_id"] not in seen_ids]
+            skipped_seen += len(data) - len(fresh)
+            buffer.extend(fresh)
+        reporter.update(discovered_count=discovered_total)
+        if not buffer:
+            break  # pool exhausted; nothing new left to enrich
+
+        take = min(batch_size, enrich_cap - enriched_total, len(buffer))
+        batch = buffer[:take]
+        buffer = buffer[take:]
         round_idx += 1
-        take = min(batch_size, enrich_cap - enriched_total, len(pool) - cursor)
-        batch = pool[cursor:cursor + take]
-        cursor += take
         reporter.update(stage=f"enriching + judging (round {round_idx})")
         print(f"\n=== round {round_idx}: {len(batch)} companies "
               f"(delivered {len(delivered)}/{target}, "
-              f"enriched {enriched_total}/{enrich_cap}) ===")
+              f"enriched {enriched_total}/{enrich_cap}, "
+              f"fetched {discovered_total}) ===")
         qualified, tried = _process_batch(
             batch, work=work, env=env, is_uk=is_uk, tag=f"r{round_idx}",
             client=client)
@@ -542,9 +579,18 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
               f"(total {len(delivered)}/{target}); "
               f"enriched {enriched_total}/{enrich_cap}")
 
+    print(f"[discover] fetched {discovered_total} businesses total "
+          f"({skipped_seen} skipped as already-tried in prior runs)")
+    if enriched_total == 0:
+        raise RuntimeError(
+            f"no new companies to enrich for {country_norm} ({code}) — discovery "
+            "returned nothing, or every company was already tried in prior runs. "
+            "Try a different market or broaden the keywords.")
+
     stop_reason = ("target met" if len(delivered) >= target
-                   else "pool exhausted" if cursor >= len(pool)
-                   else "enrich cap reached")
+                   else "enrich cap reached" if enriched_total >= enrich_cap
+                   else "discovery budget cap" if discovered_total >= discover_fetch_cap
+                   else "pool exhausted")
     # Best-scored first for delivery order. Keep ALL qualified — overshooting the
     # target with extra real leads is a bonus, not a problem.
     delivered.sort(key=lambda r: (r.get("score") or {}).get("score") or 0,
@@ -562,14 +608,18 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
                          if r.get("explorium_business_id")]
         # job_level only — Explorium's job_department enum rejects values like
         # 'operations'; pick_prospects ranks by title regardless.
+        # Billed per record; pick_prospects keeps <=2 per company, so fetch only
+        # a handful of candidates each (companies * PER_COMPANY, capped).
+        prospect_size = min(max(len(qualified_ids) * PROSPECT_PER_COMPANY, 10),
+                            PROSPECT_FETCH_CAP)
         try:
             prospects = client.fetch_prospects(
-                qualified_ids, job_levels=PROSPECT_JOB_LEVELS, size=1000)
+                qualified_ids, job_levels=PROSPECT_JOB_LEVELS, size=prospect_size)
         except ExploriumError as exc:
             print(f"[prospects] filtered fetch rejected ({exc}); retrying unfiltered")
-            prospects = client.fetch_prospects(qualified_ids, size=1000)
+            prospects = client.fetch_prospects(qualified_ids, size=prospect_size)
         if not prospects:  # European SMEs rarely tag seniority — retry unfiltered
-            prospects = client.fetch_prospects(qualified_ids, size=1000)
+            prospects = client.fetch_prospects(qualified_ids, size=prospect_size)
         prospects_raw_path = work / "prospects_raw.json"
         _dump(prospects_raw_path, prospects)
         print(f"[prospects] fetched {len(prospects)} prospect records")
@@ -697,7 +747,7 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
         sheet_id=sheet.get("sheet_id"),
         leads_delivered=leads_delivered,
         qualified_count=qualified_count,
-        discovered_count=len(discovered),
+        discovered_count=discovered_total,
         enriched_count=enriched_total,
         explorium_credits=explorium_credits,
         anthropic_usd=anthropic_usd,

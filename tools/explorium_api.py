@@ -140,7 +140,7 @@ class ExploriumClient:
         resp = self._post("businesses/stats", {"filters": filters})
         return int(resp.get("total_results") or 0)
 
-    def fetch_businesses(self, filters: Dict[str, Any], size: int = 2000,
+    def fetch_businesses(self, filters: Dict[str, Any], size: int = 100,
                          page_size: int = 100,
                          exclude: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Discover businesses matching ``filters``; paginate up to ``size``.
@@ -176,6 +176,31 @@ class ExploriumClient:
             page += 1
         return collected[:size]
 
+    def fetch_businesses_page(self, filters: Dict[str, Any], page: int = 1,
+                              page_size: int = 50,
+                              exclude: Optional[List[str]] = None
+                              ) -> List[Dict[str, Any]]:
+        """Fetch ONE page of businesses (at most ``page_size`` records).
+
+        COST: ``/businesses`` is billed PER RECORD returned (it is NOT free —
+        that earlier assumption was the pipeline's #1 cost driver). So the
+        orchestrator discovers lazily, one page at a time, only when the funnel
+        actually needs more companies, instead of pulling the whole pool up
+        front. ``size`` is sent equal to ``page_size`` to satisfy Explorium's
+        ``size >= page_size`` rule.
+        """
+        page_size = max(1, min(page_size, 100))
+        body = {
+            "mode": "full",
+            "size": page_size,
+            "page_size": page_size,
+            "page": max(1, page),
+            "filters": filters,
+            "exclude": exclude or [],
+        }
+        resp = self._post("businesses", body)
+        return resp.get("data") or []
+
     def enrich_businesses(self, business_ids: List[str]) -> List[Dict[str, Any]]:
         """Firmographics bulk-enrich in batches of 50.
 
@@ -196,7 +221,7 @@ class ExploriumClient:
     def fetch_prospects(self, business_ids: List[str],
                         job_levels: Optional[List[str]] = None,
                         job_departments: Optional[List[str]] = None,
-                        size: int = 1000,
+                        size: int = 100,
                         page_size: int = 100) -> List[Dict[str, Any]]:
         """Fetch prospects for the given companies; paginate up to ``size``.
 
