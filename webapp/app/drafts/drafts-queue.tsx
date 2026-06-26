@@ -2,8 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
+import ConfirmModal from '../confirm-modal';
 import {
   DRAFT_LANGUAGES,
+  DRAFT_LIST_SELECT,
   DRAFT_STATUSES,
   DRAFT_STATUS_LABELS,
   DRAFT_STATUS_STYLES,
@@ -17,9 +19,6 @@ export type QueueDraft = EmailDraft & {
   companies: { id: string; company_name: string; country: string | null } | null;
   templates: { id: string; name: string } | null;
 };
-
-const DRAFT_SELECT =
-  '*, contacts(id, full_name, title, email), companies(id, company_name, country), templates(id, name)';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -67,6 +66,10 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; label: string } | null>(null);
+  // Set only for an *interrupted* failed draft (the send may already have gone
+  // out) — requeueing it risks a double-send, so it goes through a confirm.
+  const [confirmRequeue, setConfirmRequeue] = useState<string | null>(null);
 
   // Approver identity — fetched once, used to stamp approved_by on writes.
   const userIdRef = useRef<string | null>(null);
@@ -82,7 +85,7 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
     const supabase = getBrowserSupabase();
     const { data } = await supabase
       .from('email_drafts')
-      .select(DRAFT_SELECT)
+      .select(DRAFT_LIST_SELECT)
       .order('created_at', { ascending: false });
     const rows = (data ?? []) as unknown as QueueDraft[];
     if (data) setDrafts(rows);
@@ -90,7 +93,12 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
   }, []);
 
   // Realtime: watch the queue drain live (approved → sending → sent) while the
-  // cron tick works through it.
+  // cron tick works through it. Apply changes INCREMENTALLY instead of refetching
+  // the whole table on every row change: during a drain each send fires several
+  // UPDATEs, and a full refetch per event per open tab is O(clients × rows). An
+  // UPDATE merges the changed columns into the existing row (its joins are kept,
+  // since the payload only carries email_drafts columns); a DELETE drops the row;
+  // an INSERT (a draft created elsewhere, missing its joins) falls back to a refetch.
   useEffect(() => {
     const supabase = getBrowserSupabase();
     const channel = supabase
@@ -98,7 +106,19 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'email_drafts' },
-        () => { void refetch(); }
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const row = payload.new as Partial<EmailDraft> & { id: string };
+            setDrafts((prev) =>
+              prev.map((d) => (d.id === row.id ? { ...d, ...row } : d))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const oldId = (payload.old as { id?: string }).id;
+            if (oldId) setDrafts((prev) => prev.filter((d) => d.id !== oldId));
+          } else {
+            void refetch(); // INSERT — need the joins the payload lacks
+          }
+        }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -192,17 +212,30 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
     savedTimer.current = setTimeout(() => setSavedFlash(false), 1800);
   }
 
-  function toggleExpand(d: QueueDraft) {
+  async function toggleExpand(d: QueueDraft) {
     if (expandedId === d.id) {
       setExpandedId(null);
       return;
     }
     setExpandedId(d.id);
     setEditSubject(d.subject);
-    setEditBody(d.body);
     setInstruction('');
     setSavedFlash(false);
     setRowError(null);
+
+    // `body` is omitted from the list query (it's the heaviest column); fetch it
+    // on first open and cache it onto the row so re-expanding doesn't refetch.
+    let body = d.body;
+    if (body == null) {
+      const { data } = await getBrowserSupabase()
+        .from('email_drafts')
+        .select('body')
+        .eq('id', d.id)
+        .maybeSingle();
+      body = (data?.body as string | undefined) ?? '';
+      setDrafts((prev) => prev.map((x) => (x.id === d.id ? { ...x, body } : x)));
+    }
+    setEditBody(body);
   }
 
   async function saveEdits(id: string) {
@@ -249,19 +282,32 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
     await refetch();
   }
 
-  async function removeDraft(id: string, label: string) {
-    if (!confirm(`Delete this draft to ${label}? This cannot be undone.`)) return;
+  async function removeDraft(id: string) {
     setBusyId(id);
     setRowError(null);
     const supabase = getBrowserSupabase();
     const { error } = await supabase.from('email_drafts').delete().eq('id', id);
     setBusyId(null);
+    setConfirmDelete(null);
     if (error) {
       setRowError(`Delete failed: ${error.message}`);
       return;
     }
     setExpandedId(null);
     setDrafts(prev => prev.filter(x => x.id !== id));
+  }
+
+  // Requeue a failed draft for sending. Factored out so both the direct path
+  // (genuine failures) and the confirmed path (interrupted, possible-double-send)
+  // share the same compare-and-swap.
+  async function requeueDraft(id: string) {
+    setConfirmRequeue(null);
+    await updateStatus(id, 'failed', {
+      status: 'approved',
+      scheduled_at: new Date().toISOString(),
+      error: null,
+      send_attempts: 0,
+    });
   }
 
   async function approveAllShown() {
@@ -479,11 +525,13 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                   key={companyName || `unknown-${ci}`}
                   style={{ borderTop: ci > 0 ? '1px solid var(--line)' : 'none' }}
                 >
-                  <div
-                    className="px-4 pt-3 pb-1 text-[12.5px] font-medium"
-                    style={{ color: 'var(--ink)' }}
-                  >
-                    {companyName || 'Unknown company'}
+                  <div className="px-4 pt-3 pb-1.5 flex items-baseline gap-2">
+                    <span className="text-[13px] font-medium" style={{ color: 'var(--navy-deep)' }}>
+                      {companyName || 'Unknown company'}
+                    </span>
+                    <span className="font-tabular text-[11px]" style={{ color: 'var(--ink-4)' }}>
+                      {companyDrafts.length}
+                    </span>
                   </div>
                   {companyDrafts.map((d, di) => {
                     const pill = DRAFT_STATUS_STYLES[d.status];
@@ -496,11 +544,17 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                       >
                         <button
                           type="button"
-                          onClick={() => toggleExpand(d)}
+                          onClick={() => void toggleExpand(d)}
+                          aria-expanded={expanded}
                           className={`w-full text-left px-4 py-2.5 cursor-pointer ${expanded ? '' : 'row-hover'}`}
                           style={expanded ? { background: 'var(--surface-2)' } : undefined}
                         >
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span
+                              aria-hidden
+                              className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ background: pill.ink }}
+                            />
                             <span className="text-[13px]" style={{ color: 'var(--ink)' }}>
                               {d.contacts?.full_name || 'Unknown contact'}
                               {d.contacts?.title && (
@@ -535,10 +589,11 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                               >
                                 {fmtDate(d.created_at)}
                               </span>
+                              <Chevron expanded={expanded} />
                             </span>
                           </div>
                           {d.status === 'failed' && d.error && (
-                            <div className="mt-1 text-[12px]" style={{ color: 'var(--warn-ink)' }}>
+                            <div className="mt-1 ml-[18px] text-[12px]" style={{ color: 'var(--warn-ink)' }}>
                               {d.error}
                             </div>
                           )}
@@ -670,31 +725,31 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                               </div>
                             )}
 
-                            {d.status === 'failed' && (
-                              <div className="space-y-2">
-                                {(d.error ?? '').toLowerCase().includes('interrupted') && (
-                                  <div className="text-[12px]" style={{ color: 'var(--warn-ink)' }}>
-                                    Check the Gmail Sent folder first. This send may already have
-                                    gone out.
-                                  </div>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void updateStatus(d.id, 'failed', {
-                                      status: 'approved',
-                                      scheduled_at: new Date().toISOString(),
-                                      error: null,
-                                      send_attempts: 0,
-                                    })
-                                  }
-                                  disabled={busyId === d.id}
-                                  className="btn-primary text-[13px]"
-                                >
-                                  Requeue
-                                </button>
-                              </div>
-                            )}
+                            {d.status === 'failed' && (() => {
+                              const interrupted = (d.error ?? '').toLowerCase().includes('interrupted');
+                              return (
+                                <div className="space-y-2">
+                                  {interrupted && (
+                                    <div className="text-[12px]" style={{ color: 'var(--warn-ink)' }}>
+                                      Check the Gmail Sent folder first. This send may already have
+                                      gone out.
+                                    </div>
+                                  )}
+                                  <button
+                                    type="button"
+                                    // Interrupted sends route through a confirm (possible double-send);
+                                    // genuine failures requeue directly.
+                                    onClick={() =>
+                                      interrupted ? setConfirmRequeue(d.id) : void requeueDraft(d.id)
+                                    }
+                                    disabled={busyId === d.id}
+                                    className="btn-primary text-[13px]"
+                                  >
+                                    Requeue
+                                  </button>
+                                </div>
+                              );
+                            })()}
 
                             {d.status === 'rejected' && (
                               <button
@@ -724,10 +779,10 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    void removeDraft(
-                                      d.id,
-                                      d.contacts?.full_name || d.contacts?.email || 'this contact'
-                                    )
+                                    setConfirmDelete({
+                                      id: d.id,
+                                      label: d.contacts?.full_name || d.contacts?.email || 'this contact',
+                                    })
                                   }
                                   disabled={busyId === d.id}
                                   className="btn-unlink"
@@ -759,39 +814,46 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
         ))
       )}
 
-      {/* Send-queue confirm overlay */}
-      {confirmOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          style={{ background: 'rgba(15, 46, 58, 0.35)' }}
-        >
-          <div className="card-soft rise-in w-full max-w-md p-5">
-            <div className="micro-label mb-2">Send queue</div>
-            <p className="text-[13.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
-              Send {approvedCount} emails from the connected Gmail, going out at about one per
-              minute (about {estMinutes} minutes)?
-            </p>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={starting}
-                className="btn-ghost text-[13px]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void startQueue()}
-                disabled={starting}
-                className="btn-primary text-[13px]"
-              >
-                {starting ? 'Queueing…' : 'Start sending'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Send-queue confirm */}
+      <ConfirmModal
+        open={confirmOpen}
+        title="Send queue"
+        confirmLabel={starting ? 'Queueing…' : 'Start sending'}
+        onConfirm={() => void startQueue()}
+        onCancel={() => setConfirmOpen(false)}
+        busy={starting}
+      >
+        Send {approvedCount} emails from the connected Gmail, going out at about one per
+        minute (about {estMinutes} minutes)?
+      </ConfirmModal>
+
+      {/* Delete-draft confirm (replaces native confirm()) */}
+      <ConfirmModal
+        open={confirmDelete !== null}
+        title="Delete draft"
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => confirmDelete && void removeDraft(confirmDelete.id)}
+        onCancel={() => setConfirmDelete(null)}
+        busy={busyId !== null && confirmDelete?.id === busyId}
+      >
+        Delete this draft to{' '}
+        <span style={{ color: 'var(--ink)' }}>{confirmDelete?.label}</span>? This cannot be undone.
+      </ConfirmModal>
+
+      {/* Interrupted-send requeue gate (possible double-send) */}
+      <ConfirmModal
+        open={confirmRequeue !== null}
+        title="Requeue this send?"
+        confirmLabel="Requeue anyway"
+        tone="danger"
+        onConfirm={() => confirmRequeue && void requeueDraft(confirmRequeue)}
+        onCancel={() => setConfirmRequeue(null)}
+      >
+        This send was interrupted and <strong>may already have gone out</strong>. Only requeue if
+        you&rsquo;ve checked the Gmail Sent folder and it is <strong>not</strong> there — otherwise
+        the prospect gets a duplicate.
+      </ConfirmModal>
     </div>
   );
 }
@@ -825,6 +887,26 @@ function FilterPill({
       {label}
       <span className="font-tabular ml-1.5">{count}</span>
     </button>
+  );
+}
+
+function Chevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="shrink-0 transition-transform"
+      style={{ color: 'var(--ink-4)', transform: expanded ? 'rotate(180deg)' : 'none' }}
+    >
+      <path d="m4 6 4 4 4-4" />
+    </svg>
   );
 }
 

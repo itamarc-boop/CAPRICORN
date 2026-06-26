@@ -49,8 +49,10 @@ Run directly:
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
+import socket
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -63,6 +65,7 @@ import requests
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36")
 TIMEOUT = 8                   # was 12 — dead/slow sites were the dominant cost
+MAX_REDIRECTS = 5             # followed manually so each hop is SSRF-checked
 MAX_PAGES = 5                 # was 7 — homepage + common paths carry the signal
 MAX_ATTEMPTS = 10             # was 16
 PAGE_TEXT_CAP = 6000          # chars kept per page for the LLM extractor
@@ -138,15 +141,58 @@ def _collapse(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
 
 
+def _assert_public_url(url: str) -> None:
+    """Raise if `url` isn't a plain http(s) URL resolving to a PUBLIC address.
+
+    The `website` we fetch comes straight from Explorium / the company record,
+    i.e. it is host-controlled. Without this guard a crafted `website` (or an
+    open redirect on a real site) could make the worker fetch an internal
+    target — cloud metadata (169.254.169.254), localhost, or RFC1918 hosts —
+    and surface the response text back into the evidence (SSRF). We resolve the
+    host and reject if ANY resolved IP is non-global. (Residual TOCTOU between
+    resolve and connect is accepted for this low-blast-radius CI tool.)
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"blocked non-http(s) URL scheme: {parsed.scheme!r}")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("blocked URL with no host")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    # getaddrinfo raises socket.gaierror for a non-resolving host; let that
+    # propagate so the caller classifies it as a dead/unreachable domain.
+    for info in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP):
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global or ip.is_reserved or ip.is_multicast:
+            raise ValueError(
+                f"blocked SSRF: host {host!r} resolves to non-public address {ip}")
+
+
 def _fetch(url: str) -> str | None:
-    """GET a URL; return HTML text, or None if it isn't an HTML page."""
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT},
-                        timeout=TIMEOUT, allow_redirects=True)
-    resp.raise_for_status()
-    ctype = resp.headers.get("Content-Type", "").lower()
-    if "html" not in ctype and "<html" not in resp.text[:2000].lower():
-        return None
-    return resp.text
+    """GET a URL; return HTML text, or None if it isn't an HTML page.
+
+    Redirects are followed MANUALLY (allow_redirects=False) so every hop is
+    re-validated by _assert_public_url — a public URL cannot 302 into an
+    internal target.
+    """
+    current = url
+    for _ in range(MAX_REDIRECTS + 1):
+        _assert_public_url(current)
+        resp = requests.get(current, headers={"User-Agent": USER_AGENT},
+                            timeout=TIMEOUT, allow_redirects=False)
+        if resp.is_redirect or resp.is_permanent_redirect:
+            location = resp.headers.get("Location")
+            if not location:
+                break
+            current = urljoin(current, location)
+            continue
+        resp.raise_for_status()
+        ctype = resp.headers.get("Content-Type", "").lower()
+        if "html" not in ctype and "<html" not in resp.text[:2000].lower():
+            return None
+        return resp.text
+    raise requests.exceptions.TooManyRedirects(
+        f"exceeded {MAX_REDIRECTS} redirects from {url}")
 
 
 def _fetch_homepage(url: str) -> Tuple[str | None, str, str | None]:

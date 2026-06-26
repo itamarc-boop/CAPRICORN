@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
+import { isEmail } from '@/lib/email/validate';
 import type { Contact } from '@/lib/db/types';
 
 /**
@@ -154,10 +155,14 @@ export default function ContactsPanel({
   return (
     <div>
       {sorted.length > 0 ? (
-        <ul className="divide-y" style={{ borderColor: 'var(--line-soft)' }}>
+        <ul className="space-y-0.5">
           {sorted.map((c) =>
             editingId === c.id ? (
-              <li key={c.id} className="py-3 first:pt-0 last:pb-0">
+              <li
+                key={c.id}
+                className="rounded-md p-3 -mx-1"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
+              >
                 <ContactForm
                   initial={toForm(c)}
                   busy={busy}
@@ -167,51 +172,64 @@ export default function ContactsPanel({
                 />
               </li>
             ) : (
-              <li key={c.id} className="row-hover -mx-2 px-2 rounded py-3 first:pt-0 last:pb-0 text-[13px] space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium" style={{ color: 'var(--ink)' }}>
-                    {c.full_name || 'Unnamed contact'}
-                  </span>
-                  {c.title && <span style={{ color: 'var(--ink-3)' }}>· {c.title}</span>}
-                  {c.is_primary && (
+              <li
+                key={c.id}
+                className="row-hover -mx-2 rounded-md px-2 py-2.5 flex items-start gap-3"
+              >
+                <Avatar name={c.full_name} email={c.email} primary={c.is_primary} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
                     <span
-                      className="pill text-[10px]"
-                      style={{ color: 'var(--info-ink)', background: 'var(--info-bg)' }}
+                      className="text-[13.5px] font-medium truncate"
+                      style={{ color: 'var(--ink)' }}
                     >
-                      primary
+                      {c.full_name || 'Unnamed contact'}
                     </span>
-                  )}
-                  <span className="ml-auto flex items-center gap-1.5 shrink-0">
-                    {!c.is_primary && (
-                      <button
-                        type="button"
-                        className="btn-ghost text-[11px]"
-                        style={{ padding: '3px 9px' }}
-                        disabled={busy}
-                        onClick={() => void makePrimary(c)}
+                    {c.title && (
+                      <span
+                        className="text-[12.5px] truncate"
+                        style={{ color: 'var(--ink-3)' }}
                       >
-                        Make primary
-                      </button>
+                        {c.title}
+                      </span>
                     )}
-                    <button
-                      type="button"
-                      className="btn-ghost text-[11px]"
-                      style={{ padding: '3px 9px' }}
-                      disabled={busy}
-                      onClick={() => {
-                        setAdding(false);
-                        setEditingId(c.id);
-                      }}
-                    >
-                      Edit
-                    </button>
-                  </span>
-                </div>
-                {c.email && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-tabular text-[12.5px]" style={{ color: 'var(--ink-2)' }}>
-                      {c.email}
+                    {c.is_primary && (
+                      <span
+                        className="text-[10px] uppercase tracking-wider font-semibold shrink-0"
+                        style={{ color: 'var(--info-ink)' }}
+                      >
+                        Primary
+                      </span>
+                    )}
+                    <span className="ml-auto flex items-center gap-0.5 shrink-0">
+                      {!c.is_primary && (
+                        <IconButton
+                          label={`Make ${c.full_name || 'contact'} the primary contact`}
+                          onClick={() => void makePrimary(c)}
+                          disabled={busy}
+                        >
+                          <StarIcon />
+                        </IconButton>
+                      )}
+                      <IconButton
+                        label={`Edit ${c.full_name || 'contact'}`}
+                        onClick={() => {
+                          setAdding(false);
+                          setEditingId(c.id);
+                        }}
+                        disabled={busy}
+                      >
+                        <PencilIcon />
+                      </IconButton>
                     </span>
+                  </div>
+
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
+                    {c.email && (
+                      <ContactLink href={`mailto:${c.email}`} icon={<MailIcon />} mono>
+                        {c.email}
+                      </ContactLink>
+                    )}
                     {c.email_label && (
                       <span
                         className="pill text-[10px]"
@@ -220,41 +238,41 @@ export default function ContactsPanel({
                         {c.email_label}
                       </span>
                     )}
+                    {c.phone && (
+                      <ContactLink
+                        href={`tel:${c.phone.replace(/[^\d+]/g, '')}`}
+                        icon={<PhoneIcon />}
+                        mono
+                      >
+                        {c.phone}
+                      </ContactLink>
+                    )}
+                    {c.linkedin_url && (
+                      <ContactLink href={c.linkedin_url} icon={<LinkExternalIcon />} external>
+                        LinkedIn
+                      </ContactLink>
+                    )}
+                    {!c.email && !c.phone && !c.linkedin_url && (
+                      <span className="text-[12px] italic" style={{ color: 'var(--ink-4)' }}>
+                        No contact details yet.
+                      </span>
+                    )}
                   </div>
-                )}
-                {c.linkedin_url && (
-                  <div>
-                    <a
-                      href={c.linkedin_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="link-soft text-[12.5px]"
-                    >
-                      LinkedIn profile →
-                    </a>
-                  </div>
-                )}
-                {c.phone && (
-                  <div className="font-tabular text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-                    {c.phone}
-                  </div>
-                )}
+                </div>
               </li>
             )
           )}
         </ul>
       ) : (
         !adding && (
-          <p className="empty-note">
-            No contacts on file for this company.
-          </p>
+          <p className="empty-note">No contacts on file for this company.</p>
         )
       )}
 
       {adding && (
         <div
-          className={sorted.length > 0 ? 'pt-3 mt-3 border-t' : ''}
-          style={sorted.length > 0 ? { borderColor: 'var(--line-soft)' } : undefined}
+          className={sorted.length > 0 ? 'mt-2.5 rounded-md p-3 -mx-1' : 'rounded-md p-3 -mx-1'}
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
         >
           <ContactForm
             initial={EMPTY_FORM}
@@ -270,8 +288,7 @@ export default function ContactsPanel({
         {!adding ? (
           <button
             type="button"
-            className="btn-ghost text-[12px]"
-            style={{ padding: '5px 11px' }}
+            className="inline-flex items-center gap-1.5 text-[12.5px] link-soft"
             disabled={busy}
             onClick={() => {
               setEditingId(null);
@@ -279,13 +296,15 @@ export default function ContactsPanel({
               setFeedback(null);
             }}
           >
-            + Add contact
+            <PlusIcon />
+            Add contact
           </button>
         ) : (
           <span />
         )}
         {feedback && (
           <span
+            aria-live="polite"
             className="text-[11.5px]"
             style={{
               color: feedback.kind === 'error' ? 'var(--warn-ink)' : 'var(--ink-3)',
@@ -300,6 +319,165 @@ export default function ContactsPanel({
         )}
       </div>
     </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Contact-row building blocks
+   ──────────────────────────────────────────────────────────────── */
+
+function initialsOf(name: string | null, email: string | null): string {
+  const n = (name ?? '').trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    const two = ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).trim();
+    return (two || n[0]).toUpperCase();
+  }
+  const e = (email ?? '').trim();
+  return e ? e[0].toUpperCase() : '?';
+}
+
+function Avatar({
+  name,
+  email,
+  primary,
+}: {
+  name: string | null;
+  email: string | null;
+  primary: boolean;
+}) {
+  return (
+    <span
+      aria-hidden
+      className="grid place-items-center rounded-full shrink-0 text-[12px] font-semibold select-none"
+      style={{
+        width: 34,
+        height: 34,
+        marginTop: 1,
+        background: primary ? 'var(--navy)' : 'var(--surface-2)',
+        color: primary ? '#fff' : 'var(--navy-deep)',
+        border: primary ? '1px solid var(--navy)' : '1px solid var(--line-strong)',
+      }}
+    >
+      {initialsOf(name, email)}
+    </span>
+  );
+}
+
+function ContactLink({
+  href,
+  icon,
+  children,
+  mono,
+  external,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  mono?: boolean;
+  external?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
+      className="inline-flex items-center gap-1.5 text-[12.5px] link-soft break-all"
+    >
+      <span aria-hidden className="shrink-0" style={{ color: 'var(--ink-4)' }}>
+        {icon}
+      </span>
+      <span className={mono ? 'font-tabular' : undefined}>{children}</span>
+    </a>
+  );
+}
+
+function IconButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className="grid place-items-center rounded-md w-[26px] h-[26px] transition-colors text-[color:var(--ink-4)] hover:text-[color:var(--navy-deep)] hover:bg-[color:var(--surface-2)] disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}
+
+/* Stroke icons, 14px, matching the side-nav vocabulary. */
+
+const stroke = {
+  width: 14,
+  height: 14,
+  viewBox: '0 0 16 16',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.4,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+function MailIcon() {
+  return (
+    <svg {...stroke}>
+      <rect x="2" y="3.5" width="12" height="9" rx="1.2" />
+      <path d="m2.6 4.6 5.4 4 5.4-4" />
+    </svg>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="M4.2 2.8h2l1 2.5-1.3.9a7.5 7.5 0 0 0 3.4 3.4l.9-1.3 2.5 1v2a1 1 0 0 1-1.1 1A10 10 0 0 1 3.2 3.9a1 1 0 0 1 1-1.1z" />
+    </svg>
+  );
+}
+
+function LinkExternalIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="M6 3.5H3.7v9h9V10" />
+      <path d="M9.2 3.5h3.3v3.3" />
+      <path d="M12.5 3.5 7.2 8.8" />
+    </svg>
+  );
+}
+
+function StarIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="M8 2.4l1.7 3.5 3.9.5-2.8 2.7.7 3.8L8 11.2 4.5 13l.7-3.8L2.4 6.4l3.9-.5z" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="M10.8 3l2.2 2.2-7.1 7.1-2.6.4.4-2.6z" />
+      <path d="M9.6 4.2l2.2 2.2" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg {...stroke} width={13} height={13}>
+      <path d="M8 3.4v9.2M3.4 8h9.2" />
+    </svg>
   );
 }
 
@@ -330,7 +508,7 @@ function ContactForm({
 
   async function submit() {
     const email = form.email.trim();
-    if (email && !email.includes('@')) {
+    if (email && !isEmail(email)) {
       setEmailError('That does not look like an email address.');
       return;
     }
@@ -347,7 +525,7 @@ function ContactForm({
             value={form.full_name}
             onChange={(e) => set('full_name', e.target.value)}
             placeholder="Jane Doe"
-            className="w-full rounded border px-2 py-1 text-[13px]"
+            className="w-full rounded border px-2.5 py-1.5 text-[13px]"
             style={{ borderColor: 'var(--line-strong)' }}
           />
         </FormField>
@@ -357,27 +535,32 @@ function ContactForm({
             value={form.title}
             onChange={(e) => set('title', e.target.value)}
             placeholder="Purchasing manager"
-            className="w-full rounded border px-2 py-1 text-[13px]"
+            className="w-full rounded border px-2.5 py-1.5 text-[13px]"
             style={{ borderColor: 'var(--line-strong)' }}
           />
         </FormField>
         <FormField label="Email" error={emailError}>
           <input
             type="email"
+            inputMode="email"
+            autoComplete="off"
+            spellCheck={false}
             value={form.email}
             onChange={(e) => set('email', e.target.value)}
             placeholder="jane@company.com"
-            className="w-full rounded border px-2 py-1 text-[13px] font-tabular"
+            className="w-full rounded border px-2.5 py-1.5 text-[13px] font-tabular"
             style={{ borderColor: emailError ? 'var(--warn-ink)' : 'var(--line-strong)' }}
           />
         </FormField>
         <FormField label="Phone">
           <input
-            type="text"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
             value={form.phone}
             onChange={(e) => set('phone', e.target.value)}
             placeholder="+44 20 …"
-            className="w-full rounded border px-2 py-1 text-[13px] font-tabular"
+            className="w-full rounded border px-2.5 py-1.5 text-[13px] font-tabular"
             style={{ borderColor: 'var(--line-strong)' }}
           />
         </FormField>
@@ -388,7 +571,7 @@ function ContactForm({
               value={form.linkedin_url}
               onChange={(e) => set('linkedin_url', e.target.value)}
               placeholder="https://linkedin.com/in/…"
-              className="w-full rounded border px-2 py-1 text-[13px]"
+              className="w-full rounded border px-2.5 py-1.5 text-[13px]"
               style={{ borderColor: 'var(--line-strong)' }}
             />
           </FormField>
@@ -398,7 +581,7 @@ function ContactForm({
         <button
           type="button"
           className="btn-primary text-[12px]"
-          style={{ padding: '5px 12px' }}
+          style={{ padding: '6px 13px' }}
           disabled={busy}
           onClick={() => void submit()}
         >
@@ -407,7 +590,7 @@ function ContactForm({
         <button
           type="button"
           className="btn-ghost text-[12px]"
-          style={{ padding: '4px 11px' }}
+          style={{ padding: '5px 12px' }}
           disabled={busy}
           onClick={onCancel}
         >
@@ -429,12 +612,7 @@ function FormField({
 }) {
   return (
     <label className="block">
-      <span
-        className="block text-[10.5px] uppercase tracking-wider mb-1"
-        style={{ color: 'var(--ink-4)' }}
-      >
-        {label}
-      </span>
+      <span className="micro-label block mb-1">{label}</span>
       {children}
       {error && (
         <span className="block text-[11px] mt-1" style={{ color: 'var(--warn-ink)' }}>

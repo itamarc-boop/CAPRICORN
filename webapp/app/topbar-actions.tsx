@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
+import ConfirmModal from './confirm-modal';
 
 /* The two recurring session verbs, surfaced globally (topbar) and echoed on the
    Home header. "Send approved (N)" acts in place: it opens a confirm and fires
@@ -89,39 +90,18 @@ export default function TopbarActions() {
         </button>
       )}
 
-      {confirmOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          style={{ background: 'rgba(15, 46, 58, 0.35)' }}
-        >
-          <div className="card-soft rise-in w-full max-w-md p-5">
-            <div className="micro-label mb-2">Send approved emails</div>
-            <p className="text-[13.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
-              Send the <span className="font-tabular">{approved}</span> approved{' '}
-              {approved === 1 ? 'email' : 'emails'}? They go out automatically at about one per
-              minute so they look natural.
-            </p>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={starting}
-                className="btn-ghost text-[13px]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void startQueue()}
-                disabled={starting}
-                className="btn-primary text-[13px]"
-              >
-                {starting ? 'Starting…' : 'Send them'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={confirmOpen}
+        title="Send approved emails"
+        confirmLabel={starting ? 'Starting…' : 'Send them'}
+        onConfirm={() => void startQueue()}
+        onCancel={() => setConfirmOpen(false)}
+        busy={starting}
+      >
+        Send the <span className="font-tabular">{approved}</span> approved{' '}
+        {approved === 1 ? 'email' : 'emails'}? They go out automatically at about one per
+        minute so they look natural.
+      </ConfirmModal>
 
       {notice && (
         <div

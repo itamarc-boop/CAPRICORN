@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
 import { renderEmail } from '@/lib/templates/render';
+import { EMAIL_RE } from '@/lib/email/validate';
 import {
   DRAFT_LANGUAGES,
   DRAFT_STATUS_LABELS,
@@ -35,8 +36,6 @@ export type PanelDraft = {
   sent_at: string | null;
   error: string | null;
 };
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function fmtDate(iso: string | null): string {

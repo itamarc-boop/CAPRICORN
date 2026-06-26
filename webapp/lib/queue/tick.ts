@@ -30,9 +30,28 @@ const STUCK_SENDING_MS = 5 * 60_000;
 const NO_GMAIL_RETRY_MS = 5 * 60_000;
 const TRANSIENT_BASE_BACKOFF_MS = 5 * 60_000;
 const MAX_SEND_ATTEMPTS = 3;
+// Discovery runs on a GitHub Actions worker capped at 45 min (discover.yml).
+// A run still 'queued'/'running' past this never reported back (the worker
+// crashed after GitHub accepted the dispatch), so reap it.
+const STALE_RUN_MS = 50 * 60_000;
 
 export async function runTick(svc: SupabaseClient): Promise<TickResult> {
   const nowIso = new Date().toISOString();
+
+  // ── 0. REAP: discovery runs the CI worker never finished. Without this they
+  //    hang in 'queued'/'running' forever and the Discover screen shows
+  //    "working…" with no end. Best-effort, on a different table, so it never
+  //    blocks (or short-circuits) the send path below.
+  const staleRunIso = new Date(Date.now() - STALE_RUN_MS).toISOString();
+  await svc
+    .from('pipeline_runs')
+    .update({
+      status: 'failed',
+      error: 'timed out — the discovery worker did not report back',
+      finished_at: nowIso,
+    })
+    .in('status', ['queued', 'running'])
+    .lt('created_at', staleRunIso);
 
   // ── a. RECOVER: sends interrupted mid-flight (deploy, function timeout).
   const staleIso = new Date(Date.now() - STUCK_SENDING_MS).toISOString();

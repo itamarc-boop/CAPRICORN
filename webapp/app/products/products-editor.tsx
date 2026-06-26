@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { getBrowserSupabase } from '@/lib/supabase/browser';
+import ConfirmModal from '../confirm-modal';
 
 export type Product = {
   id: string;
@@ -18,6 +19,7 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
   const [adding, setAdding] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
 
   const refetch = useCallback(async () => {
     const { data } = await getBrowserSupabase()
@@ -82,8 +84,8 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
     if (err) setError(err.message);
   }
 
-  async function removeProduct(id: string, name: string) {
-    if (!confirm(`Remove "${name}"? Future runs will stop searching for it.`)) return;
+  async function removeProduct(id: string) {
+    setConfirmDelete(null);
     setError(null);
     const { error: err } = await getBrowserSupabase()
       .from('discovery_products')
@@ -189,7 +191,7 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
                 </label>
                 <button
                   type="button"
-                  onClick={() => removeProduct(p.id, p.name)}
+                  onClick={() => setConfirmDelete({ id: p.id, name: p.name })}
                   className="btn-unlink"
                 >
                   Remove
@@ -207,6 +209,19 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
           </div>
         ))}
       </div>
+
+      <ConfirmModal
+        open={confirmDelete !== null}
+        title="Remove product"
+        confirmLabel="Remove"
+        tone="danger"
+        onConfirm={() => confirmDelete && void removeProduct(confirmDelete.id)}
+        onCancel={() => setConfirmDelete(null)}
+      >
+        Remove{' '}
+        <span style={{ color: 'var(--ink)' }}>&ldquo;{confirmDelete?.name}&rdquo;</span>? Future
+        discovery runs will stop searching for it.
+      </ConfirmModal>
     </div>
   );
 }

@@ -120,6 +120,20 @@ export const DRAFT_STATUS_STYLES: Record<DraftStatus, { ink: string; bg: string 
   failed:   { ink: 'var(--warn-ink)',  bg: 'var(--warn-bg)' },
 };
 
+/**
+ * Columns for the Drafts QUEUE list query — every email_drafts column EXCEPT
+ * the heavy `body` (lazy-loaded when a row is expanded), plus the display joins.
+ * Shared by the server load (drafts/page.tsx) and the client refetch so they
+ * can't drift. Keeps the list payload small even as sent drafts pile up.
+ */
+export const DRAFT_LIST_SELECT =
+  'id, company_id, contact_id, template_id, generation_batch_id, language, ' +
+  'to_email, subject, status, error, send_attempts, scheduled_at, ' +
+  'sending_started_at, approved_at, approved_by, sent_at, model, ' +
+  'gen_input_tokens, gen_output_tokens, created_by, created_at, updated_at, ' +
+  'contacts(id, full_name, title, email), companies(id, company_name, country), ' +
+  'templates(id, name)';
+
 export type EmailDraft = {
   id: string;
   company_id: string;
@@ -148,7 +162,6 @@ export type EmailDraft = {
 
 export type EmailLogRow = {
   id: string;
-  lead_id: string | null;
   company_id: string | null;
   contact_id: string | null;
   draft_id: string | null;
@@ -245,4 +258,67 @@ export type PipelineRun = {
   started_at: string | null;
   finished_at: string | null;
   updated_at: string;
+};
+
+/* ─────────────────────────────────────────────────────────────────
+   Tables that previously had no shared type (callers hand-rolled row
+   shapes that drifted from the SQL). These are the single source of
+   truth — import from here instead of redeclaring inline.
+   ───────────────────────────────────────────────────────────────── */
+
+/** integrations.provider — the column is free `text`; this is the real domain. */
+export type IntegrationProvider = 'gmail' | 'outlook' | 'google_drive';
+
+/** integrations (0001 + 0006). Token columns are server/service-role only. */
+export type Integration = {
+  id: string;
+  provider: IntegrationProvider;
+  account_email: string;
+  access_token: string;
+  refresh_token: string | null;
+  scope: string | null;
+  token_expires_at: string | null;
+  owner_user_id: string | null;
+  last_used_at: string | null;
+  /** provider='google_drive' only: the sheet successive runs append to (0006). */
+  master_sheet_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Display-safe subset (no token columns) — what the browser may read post-0010. */
+export type IntegrationPublic = Pick<
+  Integration,
+  | 'id' | 'provider' | 'account_email' | 'scope' | 'token_expires_at'
+  | 'owner_user_id' | 'last_used_at' | 'master_sheet_id' | 'created_at' | 'updated_at'
+>;
+
+/** discovery_products (0007) — client-editable catalog driving discovery. */
+export type DiscoveryProduct = {
+  id: string;
+  name: string;
+  keywords: string;
+  active: boolean;
+  sort: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** seen_companies (0005) — cross-run "already tried" dedup store. */
+export type SeenCompany = {
+  business_id: string;
+  country: string;
+  company_name: string | null;
+  verdict: string | null;
+  run_id: string | null;
+  created_at: string;
+};
+
+export type AppRole = 'admin' | 'client';
+
+/** app_users (0001) — the allowlist. */
+export type AppUser = {
+  email: string;
+  role: AppRole;
+  created_at: string;
 };

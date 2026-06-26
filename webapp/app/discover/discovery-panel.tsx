@@ -10,6 +10,7 @@ import {
 } from '@/lib/db/types';
 import { COUNTRY_NAMES, isSupportedCountry } from '@/lib/countries';
 import type { AppRole } from '@/lib/auth/allowlist';
+import ConfirmModal from '../confirm-modal';
 
 const MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -282,60 +283,40 @@ export default function DiscoveryPanel({
       </div>
 
       {/* ── Confirm overlay ───────────────────────────────────────── */}
-      {confirmOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          style={{ background: 'rgba(15, 46, 58, 0.35)' }}
-        >
-          <div className="card-soft rise-in w-full max-w-md p-5">
-            <div className="micro-label mb-2">Start discovery</div>
-            <p className="text-[13.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
-              Find about{' '}
-              <span className="font-tabular">{target}</span> leads in{' '}
-              <span className="font-display" style={{ color: 'var(--navy-deep)' }}>
-                {titleCase(countryTrimmed)}
-              </span>
-              .
-            </p>
-            {isAdmin ? (
-              <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-                Roughly{' '}
-                <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>{credits}</span>{' '}
-                Explorium credits and about{' '}
-                <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>${dollars}</span>{' '}
-                of AI per run.
-              </p>
-            ) : (
-              <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-                This takes a few minutes. You can keep working while it runs.
-              </p>
-            )}
-            <p className="mt-2 text-[12px]" style={{ color: 'var(--warn-ink)' }}>
-              {isAdmin
-                ? 'This spends real Explorium credits and AI budget.'
-                : 'This starts a real discovery run.'}
-            </p>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={starting}
-                className="btn-ghost text-[13px]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void startRun()}
-                disabled={starting}
-                className="btn-primary text-[13px]"
-              >
-                {starting ? 'Starting…' : 'Start run'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={confirmOpen}
+        title="Start discovery"
+        confirmLabel={starting ? 'Starting…' : 'Start run'}
+        onConfirm={() => void startRun()}
+        onCancel={() => setConfirmOpen(false)}
+        busy={starting}
+      >
+        <p>
+          Find about <span className="font-tabular">{target}</span> leads in{' '}
+          <span className="font-display" style={{ color: 'var(--navy-deep)' }}>
+            {titleCase(countryTrimmed)}
+          </span>
+          .
+        </p>
+        {isAdmin ? (
+          <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+            Roughly{' '}
+            <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>{credits}</span>{' '}
+            Explorium credits and about{' '}
+            <span className="font-tabular" style={{ color: 'var(--ink-2)' }}>${dollars}</span>{' '}
+            of AI per run.
+          </p>
+        ) : (
+          <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+            This takes a few minutes. You can keep working while it runs.
+          </p>
+        )}
+        <p className="mt-2 text-[12px]" style={{ color: 'var(--warn-ink)' }}>
+          {isAdmin
+            ? 'This spends real Explorium credits and AI budget.'
+            : 'This starts a real discovery run.'}
+        </p>
+      </ConfirmModal>
     </div>
   );
 }

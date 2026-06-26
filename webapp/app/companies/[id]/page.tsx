@@ -614,8 +614,8 @@ function EvidenceCard({ label, raw }: { label: string; raw: string | null }) {
   const style = verdictStyle(parsed.verdict);
   return (
     <div
-      className="rounded-[5px] border p-4"
-      style={{ borderColor: 'var(--line-soft)', background: 'var(--surface-2)' }}
+      className="rounded-[5px] p-4"
+      style={{ background: 'var(--surface-2)' }}
     >
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <span className="micro-label">{label}</span>

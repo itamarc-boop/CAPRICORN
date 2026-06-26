@@ -8,6 +8,7 @@
 import { google } from 'googleapis';
 import type { Credentials, OAuth2Client } from 'google-auth-library';
 import { getServiceSupabase } from '@/lib/supabase/server';
+import type { IntegrationProvider } from '@/lib/db/types';
 
 export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
@@ -33,7 +34,9 @@ export function scopesFor(provider: ConnectProvider): string[] {
 
 export type IntegrationRow = {
   id: string;
-  provider: 'gmail';
+  // The integrations table stores gmail / outlook / google_drive; this used to
+  // be narrowed to the literal 'gmail', which lied about the column's domain.
+  provider: IntegrationProvider;
   account_email: string;
   access_token: string;
   refresh_token: string | null;

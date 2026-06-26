@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { requireAppUser } from '@/lib/auth/allowlist';
 import { getServerSupabase } from '@/lib/supabase/server';
 import TodayQueue from './today-queue';
-import TopbarActions from './topbar-actions';
 import {
   COMPANY_STATUSES,
   COMPANY_STATUS_LABELS,
@@ -288,7 +287,8 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <TopbarActions />
+          {/* "Get new leads" / "Send approved" live in the sticky topbar
+              (layout.tsx) on every screen — don't duplicate them here. */}
           <Link href="/companies" className="btn-ghost text-[13px]">
             All companies
           </Link>

@@ -124,12 +124,42 @@ def run_eval(labels: List[Dict[str, Any]],
              candidates: Dict[str, Dict[str, Any]],
              judged: Optional[Dict[str, Dict[str, Any]]] = None,
              *, model: str = "claude-sonnet-4-6",
-             budget_usd: float = 2.0) -> Dict[str, Any]:
+             budget_usd: float = 2.0,
+             few_shot_seed: int = 7,
+             exclude_few_shot: bool = True) -> Dict[str, Any]:
     """Returns a structured report.
 
     If `judged` is None, runs the BDR judge live on candidates that match a
     label. Otherwise reads verdicts from `judged` (name -> record-with-judgment).
+
+    De-contamination: the BDR judge embeds up to FEW_SHOT_COUNT labelled
+    companies (name + their correct verdict) in its few-shot prompt, so grading
+    the judge on those same companies is answer leakage that inflates the
+    metric. By default we exclude any label whose company is in the few-shot
+    block the judge uses (same `few_shot_seed`) and score only the HELD-OUT
+    remainder — the few-shot pool is the de-facto train split. Pass
+    exclude_few_shot=False to score everything (contaminated; for debugging).
     """
+    few_shot_names: set = set()
+    if exclude_few_shot:
+        try:
+            from bdr_judge import load_playbook as _load_pb
+            from bdr_judge import sample_examples as _sample
+            few_shot_names = {_norm(e.get("company", ""))
+                              for e in _sample(_load_pb(), seed=few_shot_seed)}
+        except Exception as exc:  # noqa: BLE001 — never break eval on this
+            print(f"[eval] few-shot exclusion unavailable ({exc}); scoring ALL "
+                  "labels — metric may be contaminated.", file=sys.stderr)
+
+    total_label_count = len(labels)
+    few_shot_excluded = [l for l in labels
+                         if _norm(l["company"]) in few_shot_names]
+    labels = [l for l in labels if _norm(l["company"]) not in few_shot_names]
+    if few_shot_excluded:
+        print(f"[eval] held-out: scoring {len(labels)} labels; excluded "
+              f"{len(few_shot_excluded)} that appear in the judge's few-shot "
+              f"block (seed={few_shot_seed}).", file=sys.stderr)
+
     matched: List[Dict[str, Any]] = []
     missing: List[str] = []
     for label in labels:
@@ -176,7 +206,9 @@ def run_eval(labels: List[Dict[str, Any]],
             per_vertical[v]["agree"] += 1
 
     return {
-        "total_labels": len(labels),
+        "total_labels": total_label_count,
+        "few_shot_excluded": len(few_shot_excluded),
+        "held_out_labels": len(labels),
         "matched": len(matched),
         "missing_from_candidates": missing,
         "t1_precision": round(prec, 3),

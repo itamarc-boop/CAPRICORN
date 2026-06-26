@@ -502,7 +502,11 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
         "website_keywords": {"values": keywords},
     }
 
-    explorium_credits = 0  # rough: enriched companies + enriched prospects
+    # Running tally of ENRICHED records (companies + prospects). Discovery and
+    # raw-prospect fetches are ALSO billed per record by Explorium; those are
+    # added back into the reported total (explorium_billed) at the end so the
+    # number shown to the client reflects the real bill, not just enrichment.
+    explorium_credits = 0
 
     # --- 1. size the market (free, best-effort) -----------------------------
     discovered_estimate = 0
@@ -593,7 +597,7 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
                    else "pool exhausted")
     # Best-scored first for delivery order. Keep ALL qualified — overshooting the
     # target with extra real leads is a bonus, not a problem.
-    delivered.sort(key=lambda r: (r.get("score") or {}).get("score") or 0,
+    delivered.sort(key=lambda r: (r.get("score") or {}).get("total_score") or 0,
                    reverse=True)
     print(f"\n[loop] {len(delivered)} qualified after {round_idx} round(s), "
           f"{enriched_total} enriched ({stop_reason}).")
@@ -602,6 +606,7 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
 
     # --- fetch + pick + enrich contacts for the DELIVERED set ---------------
     contacts_by_biz: Dict[str, List[Dict[str, Any]]] = {}
+    prospects_fetched = 0  # raw /prospects records returned (billed per record)
     if delivered:
         reporter.update(stage="finding contacts")
         qualified_ids = [r.get("explorium_business_id") for r in delivered
@@ -622,7 +627,8 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
             prospects = client.fetch_prospects(qualified_ids, size=prospect_size)
         prospects_raw_path = work / "prospects_raw.json"
         _dump(prospects_raw_path, prospects)
-        print(f"[prospects] fetched {len(prospects)} prospect records")
+        prospects_fetched = len(prospects)
+        print(f"[prospects] fetched {prospects_fetched} prospect records")
 
         picked_path = work / "picked.json"
         if prospects:
@@ -740,6 +746,11 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
         + float(env["WEB_VERIFY_USD_BUDGET"])
     ) * max(1, round_idx), 2)
 
+    # True per-record Explorium bill = every record FETCHED (discovery +
+    # raw prospects) PLUS every record ENRICHED (companies + prospect
+    # contacts/profiles). The old number counted only enrichment and so
+    # materially understated the bill the client pays.
+    explorium_billed = discovered_total + prospects_fetched + explorium_credits
     reporter.update(
         status="succeeded",
         stage="done",
@@ -749,12 +760,14 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
         qualified_count=qualified_count,
         discovered_count=discovered_total,
         enriched_count=enriched_total,
-        explorium_credits=explorium_credits,
+        explorium_credits=explorium_billed,
         anthropic_usd=anthropic_usd,
         finished_at=_now(),
     )
     print(f"\nDONE — {leads_delivered} leads, {qualified_count} companies, "
-          f"~{explorium_credits} Explorium credits. Sheet: "
+          f"~{explorium_billed} Explorium records billed "
+          f"(discovered {discovered_total}, enriched {enriched_total}, "
+          f"prospects fetched {prospects_fetched}). Sheet: "
           f"{sheet.get('sheet_url')}")
 
 

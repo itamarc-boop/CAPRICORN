@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAppUser } from '@/lib/auth/allowlist';
 import { getServerSupabase, getServiceSupabase } from '@/lib/supabase/server';
+import { EMAIL_RE } from '@/lib/email/validate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,8 +15,6 @@ type Body = {
   subject?: unknown;
   body?: unknown;
 };
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * POST /api/drafts/create

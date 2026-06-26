@@ -3,6 +3,7 @@ import { requireAppUser } from '@/lib/auth/allowlist';
 import { getServerSupabase, getServiceSupabase } from '@/lib/supabase/server';
 import { getAnthropic } from '@/lib/ai/anthropic';
 import { generateDraft, type DraftTemplate } from '@/lib/ai/draft';
+import { isEmail } from '@/lib/email/validate';
 import type { Company, Contact } from '@/lib/db/types';
 
 export const runtime = 'nodejs';
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
   // Optional override recipient (single-contact use from the dossier). Null =>
   // send to each contact's own email.
   const toEmailRaw = typeof payload.to_email === 'string' ? payload.to_email.trim() : '';
-  if (toEmailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmailRaw)) {
+  if (toEmailRaw && !isEmail(toEmailRaw)) {
     return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
   }
   const toEmail = toEmailRaw || null;
@@ -123,11 +124,27 @@ export async function POST(req: NextRequest) {
     ((contactRows ?? []) as ContactWithCompany[]).map((c) => [c.id, c])
   );
 
+  // Skip contacts that already have a LIVE draft (one-live-per-contact, enforced
+  // hard by the email_drafts_one_live_per_contact partial unique index). Doing
+  // it up front avoids burning an Anthropic call on a draft the insert would
+  // reject. sent/rejected are terminal and don't block a fresh draft.
+  const { data: liveDrafts } = await svc
+    .from('email_drafts')
+    .select('contact_id')
+    .in('contact_id', contactIds)
+    .in('status', ['draft', 'approved', 'sending', 'failed']);
+  const contactsWithLiveDraft = new Set(
+    (liveDrafts ?? []).map((d) => d.contact_id as string)
+  );
+
   const generationBatchId = crypto.randomUUID();
 
   const results: GenerateResult[] = await runPool(contactIds, CONCURRENCY, async (contactId) => {
     const contact = contactById.get(contactId);
     if (!contact) return { contact_id: contactId, error: 'contact_not_found' };
+    if (contactsWithLiveDraft.has(contactId)) {
+      return { contact_id: contactId, error: 'already_has_draft' };
+    }
     if (!contact.email && !toEmail) return { contact_id: contactId, error: 'no_email' };
     const company = contact.companies;
     if (!company) return { contact_id: contactId, error: 'company_not_found' };
@@ -160,6 +177,11 @@ export async function POST(req: NextRequest) {
         .select('id')
         .single();
       if (insertErr || !inserted) {
+        // 23505 = the partial unique index fired: a concurrent request already
+        // created a live draft for this contact between our pre-check and now.
+        if (insertErr?.code === '23505') {
+          return { contact_id: contactId, error: 'already_has_draft' };
+        }
         throw new Error(insertErr?.message ?? 'draft_insert_failed');
       }
 
