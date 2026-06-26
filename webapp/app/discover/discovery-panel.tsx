@@ -218,7 +218,7 @@ export default function DiscoveryPanel({
 
         {countryTrimmed.length > 0 && !countryValid && (
           <p className="mt-2 text-[11.5px]" style={{ color: 'var(--warn-ink)' }}>
-            That country isn&rsquo;t supported yet — pick one from the list.
+            That country isn&rsquo;t supported yet. Pick one from the list.
           </p>
         )}
 
@@ -239,7 +239,7 @@ export default function DiscoveryPanel({
         {/* Yield expectations — sets the 'often fewer than your aim' expectation. */}
         <p className="mt-3 text-[12px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
           We discover many companies and deliver only the ones that truly fit, so the
-          number delivered is often smaller than your aim — especially in new markets.
+          number delivered is often smaller than your aim, especially in new markets.
         </p>
 
         {notice && (
@@ -257,20 +257,29 @@ export default function DiscoveryPanel({
       </div>
 
       {/* ── Runs list ─────────────────────────────────────────────── */}
-      {runs.length === 0 ? (
-        <div
-          className="card-soft p-5 text-[13px] italic"
-          style={{ color: 'var(--ink-4)' }}
-        >
-          No runs yet. Pick a country above and press Run discovery.
+      <div>
+        <div className="section-head mb-4">
+          <h2 className="section-title">Recent runs</h2>
+          {runs.length > 0 && (
+            <div className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+              <span className="font-tabular">{runs.length}</span> runs
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="space-y-3">
-          {runs.map((run) => (
-            <RunCard key={run.id} run={run} isAdmin={isAdmin} />
-          ))}
-        </div>
-      )}
+        {runs.length === 0 ? (
+          <div className="card-soft p-5">
+            <p className="empty-note">
+              No runs yet. Pick a country above and press Run discovery to find your first leads.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {runs.map((run) => (
+              <RunCard key={run.id} run={run} isAdmin={isAdmin} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Confirm overlay ───────────────────────────────────────── */}
       {confirmOpen && (
@@ -337,7 +346,7 @@ function RunCard({ run, isAdmin }: { run: PipelineRun; isAdmin: boolean }) {
   const reviewCount = run.qualified_count ?? run.leads_delivered ?? 0;
 
   return (
-    <div className="card-soft p-4">
+    <div className="card-soft p-4" style={{ borderTop: `2px solid ${pill.ink}` }}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span
           className="font-display text-[16px]"
@@ -393,8 +402,8 @@ function RunCard({ run, isAdmin }: { run: PipelineRun; isAdmin: boolean }) {
         <>
           {reviewCount === 0 && (
             <p className="mt-3 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-              No companies passed the quality bar this time. Try a larger aim, or another market
-              {' '}— yield is often thinner in newer markets.
+              No companies passed the quality bar this time. Try a larger aim, or another market.
+              Yield is often thinner in newer markets.
             </p>
           )}
           {(reviewCount > 0 || run.sheet_url) && (
@@ -463,7 +472,7 @@ function Count({ label, value }: { label: string; value: number | null }) {
   return (
     <div>
       <div className="micro-label">{label}</div>
-      <div className="font-tabular text-[15px]" style={{ color: 'var(--ink)' }}>
+      <div className="stat-num mt-0.5" style={{ fontSize: '20px', color: 'var(--navy-deep)' }}>
         {value}
       </div>
     </div>
@@ -472,11 +481,7 @@ function Count({ label, value }: { label: string; value: number | null }) {
 
 function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
   return (
-    <label
-      htmlFor={htmlFor}
-      className="block text-[10.5px] uppercase tracking-wider mb-1"
-      style={{ color: 'var(--ink-4)' }}
-    >
+    <label htmlFor={htmlFor} className="micro-label block mb-1">
       {children}
     </label>
   );

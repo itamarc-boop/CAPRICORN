@@ -107,7 +107,7 @@ function TierBar({ byTier }: { byTier: Record<Tier, number> }) {
   return (
     <div className="mt-3">
       <div
-        className="flex h-1.5 w-full overflow-hidden rounded-full"
+        className="flex h-2 w-full gap-[2px] overflow-hidden rounded-full"
         style={{ background: 'var(--line-soft)' }}
         aria-hidden
       >
@@ -116,6 +116,7 @@ function TierBar({ byTier }: { byTier: Record<Tier, number> }) {
             byTier[tier] > 0 ? (
               <div
                 key={tier}
+                className="rounded-full"
                 style={{
                   width: `${(byTier[tier] / tierTotal) * 100}%`,
                   background: TIER_STYLES[tier].bg,
@@ -183,23 +184,8 @@ function CountryCard({ rollup }: { rollup: CountryRollup }) {
 
 /* ── Small presentational helpers ────────────────────────────────── */
 
-function MicroLabel({ children }: { children: ReactNode }) {
-  return (
-    <div
-      className="text-[10.5px] uppercase tracking-wider font-semibold"
-      style={{ color: 'var(--ink-3)' }}
-    >
-      {children}
-    </div>
-  );
-}
-
 function SectionHeading({ children }: { children: ReactNode }) {
-  return (
-    <h2 className="font-display text-[20px] leading-none" style={{ color: 'var(--navy-deep)' }}>
-      {children}
-    </h2>
-  );
+  return <h2 className="section-title">{children}</h2>;
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
@@ -210,7 +196,7 @@ export default async function DashboardPage() {
 
   const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [companiesRes, draftsRes, sendsRes, contactsRes, gmailRes] = await Promise.all([
+  const [companiesRes, draftsRes, sendsRes, contactsRes, outlookRes] = await Promise.all([
     supabase
       .from('companies')
       .select('id, country, icp_tier, status, company_name, created_at, batch_label, iteration'),
@@ -221,12 +207,15 @@ export default async function DashboardPage() {
       .gte('sent_at', sinceIso)
       .order('sent_at', { ascending: false }),
     supabase.from('contacts').select('id'),
-    supabase.from('integrations').select('id').eq('provider', 'gmail').limit(1),
+    supabase.from('integrations').select('id').eq('provider', 'outlook').limit(1),
   ]);
 
   if (companiesRes.error) {
     return (
-      <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div
+        className="rounded p-4 text-[13px]"
+        style={{ background: 'var(--danger-bg)', color: 'var(--danger-ink)' }}
+      >
         Failed to load companies: {companiesRes.error.message}
       </div>
     );
@@ -241,21 +230,21 @@ export default async function DashboardPage() {
           No companies yet
         </h2>
         <p className="text-[13.5px] mb-6" style={{ color: 'var(--ink-3)' }}>
-          Run Discover to find your first leads, then connect Gmail so you can email them.
+          Run Discover to find your first leads, then connect Outlook so you can email them.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2.5">
           <Link href="/discover" className="btn-primary text-[13px]">
             Discover your first leads
           </Link>
           <Link href="/integrations" className="btn-ghost text-[13px]">
-            Connect Gmail
+            Connect Outlook
           </Link>
         </div>
       </div>
     );
   }
 
-  const gmailConnected = (gmailRes.data ?? []).length > 0;
+  const outlookConnected = (outlookRes.data ?? []).length > 0;
 
   const drafts = (draftsRes.data ?? []) as DraftSlice[];
   const sends = (sendsRes.data ?? []) as SendSlice[];
@@ -284,13 +273,18 @@ export default async function DashboardPage() {
   return (
     <div>
       {/* 1 — Header */}
-      <div className="flex items-end justify-between mb-6 pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
+      <div className="flex items-end justify-between mb-8 pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
         <div>
-          <h1 className="font-display text-[34px] leading-none" style={{ color: 'var(--navy-deep)' }}>
+          <div className="micro-label mb-2">Lead Operations</div>
+          <h1 className="font-display text-[40px] leading-none" style={{ color: 'var(--navy-deep)' }}>
             Dashboard
           </h1>
-          <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-            Your outreach for today.
+          <p className="mt-3 text-[13px]" style={{ color: 'var(--ink-3)' }}>
+            <span className="font-tabular" style={{ color: 'var(--ink)' }}>{draftCount}</span> to review
+            <span className="mx-2" style={{ color: 'var(--ink-4)' }}>·</span>
+            <span className="font-tabular" style={{ color: 'var(--ink)' }}>{approvedCount}</span> queued
+            <span className="mx-2" style={{ color: 'var(--ink-4)' }}>·</span>
+            <span className="font-tabular" style={{ color: 'var(--ink)' }}>{sends.length}</span> sent this week
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -301,15 +295,15 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Connect-Gmail prompt — sends fail silently with no mailbox. */}
-      {!gmailConnected && (
+      {/* Connect-Outlook prompt — sends fail silently with no mailbox. */}
+      {!outlookConnected && (
         <Link
           href="/integrations"
           className="mb-6 flex items-center justify-between rounded px-3.5 py-2.5 text-[13px]"
           style={{ background: 'var(--info-bg)', color: 'var(--info-ink)' }}
         >
-          <span>Connect your Gmail so you can send approved emails.</span>
-          <span className="font-medium shrink-0 ml-3">Connect Gmail →</span>
+          <span>Connect your Outlook so you can send approved emails.</span>
+          <span className="font-medium shrink-0 ml-3">Connect Outlook →</span>
         </Link>
       )}
 
@@ -317,10 +311,8 @@ export default async function DashboardPage() {
       <TodayQueue />
 
       {/* 3 — Pipeline context (how am I doing) */}
-      <div className="flex items-end justify-between pb-3 mb-4 border-b" style={{ borderColor: 'var(--line)' }}>
-        <h2 className="font-display text-[20px] leading-none" style={{ color: 'var(--navy-deep)' }}>
-          Pipeline
-        </h2>
+      <div className="section-head mb-4">
+        <h2 className="section-title">Pipeline</h2>
       </div>
 
       {/* Funnel row */}
@@ -329,46 +321,42 @@ export default async function DashboardPage() {
           <Link
             key={status}
             href={`/companies?status=${encodeURIComponent(status)}`}
-            className="card-soft p-4 block hover:border-[var(--line-strong)]"
+            className="card-soft card-interactive p-4 flex flex-col gap-3"
+            style={{ borderTop: `2px solid ${COMPANY_STATUS_STYLES[status].ink}` }}
           >
-            <div
-              className="font-tabular text-[28px] leading-none"
-              style={{ color: 'var(--navy-deep)' }}
-            >
+            <div className="stat-num" style={{ fontSize: '34px', color: 'var(--navy-deep)' }}>
               {statusCounts[status]}
             </div>
-            <div className="mt-2.5">
-              <span
-                className="pill"
-                style={{
-                  color: COMPANY_STATUS_STYLES[status].ink,
-                  background: COMPANY_STATUS_STYLES[status].bg,
-                }}
-              >
-                {COMPANY_STATUS_LABELS[status]}
-              </span>
-            </div>
+            <span
+              className="pill self-start"
+              style={{
+                color: COMPANY_STATUS_STYLES[status].ink,
+                background: COMPANY_STATUS_STYLES[status].bg,
+              }}
+            >
+              {COMPANY_STATUS_LABELS[status]}
+            </span>
           </Link>
         ))}
       </div>
 
       {/* 3 — Secondary strip */}
       <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Link href="/drafts" className="card-soft p-4 block hover:border-[var(--line-strong)]">
-          <MicroLabel>Drafts to review</MicroLabel>
-          <div className="mt-1.5 font-tabular text-[22px] leading-none" style={{ color: 'var(--navy-deep)' }}>
+        <Link href="/drafts" className="card-soft card-interactive p-4 block">
+          <div className="micro-label">Drafts to review</div>
+          <div className="stat-num mt-1.5" style={{ fontSize: '22px', color: 'var(--navy-deep)' }}>
             {draftCount}
           </div>
         </Link>
-        <Link href="/drafts" className="card-soft p-4 block hover:border-[var(--line-strong)]">
-          <MicroLabel>Approved, queued</MicroLabel>
-          <div className="mt-1.5 font-tabular text-[22px] leading-none" style={{ color: 'var(--navy-deep)' }}>
+        <Link href="/drafts" className="card-soft card-interactive p-4 block">
+          <div className="micro-label">Approved, queued</div>
+          <div className="stat-num mt-1.5" style={{ fontSize: '22px', color: 'var(--navy-deep)' }}>
             {approvedCount}
           </div>
         </Link>
         <div className="card-soft p-4">
-          <MicroLabel>Emails sent · 7 days</MicroLabel>
-          <div className="mt-1.5 font-tabular text-[22px] leading-none" style={{ color: 'var(--navy-deep)' }}>
+          <div className="micro-label">Emails sent · 7 days</div>
+          <div className="stat-num mt-1.5" style={{ fontSize: '22px', color: 'var(--navy-deep)' }}>
             {sends.length}
           </div>
         </div>
@@ -380,12 +368,12 @@ export default async function DashboardPage() {
       </p>
 
       {/* 4 — Recent sends / Recently added */}
-      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-5">
         <section>
           <SectionHeading>Recent sends</SectionHeading>
           <div className="card-soft mt-3">
             {recentSends.length === 0 ? (
-              <p className="p-4 text-[13px] italic" style={{ color: 'var(--ink-3)' }}>
+              <p className="empty-note p-4">
                 No emails sent yet. Generate drafts from Companies.
               </p>
             ) : (
@@ -397,7 +385,7 @@ export default async function DashboardPage() {
                   return (
                     <li
                       key={send.id}
-                      className="px-4 py-3"
+                      className="row-hover px-4 py-3"
                       style={i > 0 ? { borderTop: '1px solid var(--line-soft)' } : undefined}
                     >
                       <div className="flex items-baseline justify-between gap-3">
@@ -447,7 +435,7 @@ export default async function DashboardPage() {
                 return (
                   <li
                     key={company.id}
-                    className="px-4 py-3"
+                    className="row-hover px-4 py-3"
                     style={i > 0 ? { borderTop: '1px solid var(--line-soft)' } : undefined}
                   >
                     <div className="flex items-baseline justify-between gap-3">
@@ -495,7 +483,7 @@ export default async function DashboardPage() {
 
       {/* 5 — Markets */}
       <div className="mt-10">
-        <div className="flex items-end justify-between pb-3 border-b" style={{ borderColor: 'var(--line)' }}>
+        <div className="section-head">
           <SectionHeading>Markets</SectionHeading>
           <div className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
             <span className="font-tabular">{rollups.length}</span> markets

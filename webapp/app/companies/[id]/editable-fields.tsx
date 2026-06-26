@@ -73,10 +73,8 @@ export function NotesPanel({ company }: { company: BasicsCompany }) {
 
   return (
     <section className="card-soft p-5">
-      <div className="flex items-baseline justify-between mb-3.5">
-        <h2 className="font-display text-[15px]" style={{ color: 'var(--navy-deep)' }}>
-          Notes
-        </h2>
+      <div className="section-head mb-4">
+        <h2 className="section-title">Notes</h2>
         <SaveNote state={state} error={error} />
       </div>
       <textarea
@@ -400,7 +398,7 @@ export function EditableBasics({ company }: { company: BasicsCompany }) {
               {saved}
             </p>
           ) : (
-            <p className="text-[13px] italic" style={{ color: 'var(--ink-4)' }}>
+            <p className="empty-note">
               No description yet.
             </p>
           )

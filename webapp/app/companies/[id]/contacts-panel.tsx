@@ -167,7 +167,7 @@ export default function ContactsPanel({
                 />
               </li>
             ) : (
-              <li key={c.id} className="py-3 first:pt-0 last:pb-0 text-[13px] space-y-1">
+              <li key={c.id} className="row-hover -mx-2 px-2 rounded py-3 first:pt-0 last:pb-0 text-[13px] space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium" style={{ color: 'var(--ink)' }}>
                     {c.full_name || 'Unnamed contact'}
@@ -245,7 +245,7 @@ export default function ContactsPanel({
         </ul>
       ) : (
         !adding && (
-          <p className="text-[13px] italic" style={{ color: 'var(--ink-4)' }}>
+          <p className="empty-note">
             No contacts on file for this company.
           </p>
         )

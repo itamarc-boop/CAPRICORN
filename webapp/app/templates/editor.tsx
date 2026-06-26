@@ -125,9 +125,9 @@ export default function TemplatesEditor({ initial }: { initial: Template[] }) {
             <li key={t.id} className="flex items-stretch">
               <button
                 onClick={() => select(t.id)}
-                className="flex-1 min-w-0 text-left px-3.5 py-2.5 text-[13px] truncate transition-colors"
+                className="row-hover flex-1 min-w-0 text-left px-3.5 py-2.5 text-[13px] truncate"
                 style={{
-                  background: selectedId === t.id ? 'var(--surface-2)' : 'transparent',
+                  background: selectedId === t.id ? 'var(--surface-2)' : undefined,
                   color: 'var(--ink)',
                   fontWeight: selectedId === t.id ? 500 : 400,
                 }}
@@ -150,7 +150,7 @@ export default function TemplatesEditor({ initial }: { initial: Template[] }) {
 
       <section className="lg:col-span-3">
         {!draft ? (
-          <p className="text-[13px] italic" style={{ color: 'var(--ink-4)' }}>
+          <p className="empty-note">
             Pick a template on the left, or create a new one.
           </p>
         ) : (
@@ -202,10 +202,7 @@ export default function TemplatesEditor({ initial }: { initial: Template[] }) {
                 color: 'var(--ink-2)',
               }}
             >
-              <div
-                className="font-medium mb-1 text-[10.5px] uppercase tracking-wider"
-                style={{ color: 'var(--ink-4)' }}
-              >
+              <div className="micro-label mb-1">
                 Available variables
               </div>
               <p className="mb-2 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
@@ -276,10 +273,7 @@ export default function TemplatesEditor({ initial }: { initial: Template[] }) {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label
-      className="block text-[10.5px] uppercase tracking-wider mb-1.5"
-      style={{ color: 'var(--ink-4)' }}
-    >
+    <label className="micro-label block mb-1.5">
       {children}
     </label>
   );

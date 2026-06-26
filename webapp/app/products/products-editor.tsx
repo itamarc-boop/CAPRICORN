@@ -113,8 +113,8 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
 
       {/* Add a product */}
       <div className="card-soft p-4 mb-6">
-        <div className="text-[13px] font-medium mb-3" style={{ color: 'var(--navy-deep)' }}>
-          Add a product
+        <div className="section-head mb-4">
+          <h2 className="section-title">Add a product</h2>
         </div>
         <div className="space-y-3">
           <input
@@ -128,7 +128,7 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
             <textarea
               value={newKeywords}
               onChange={(e) => setNewKeywords(e.target.value)}
-              placeholder="Search terms, comma-separated — or let AI suggest them"
+              placeholder="Search terms, comma-separated, or let AI suggest them"
               rows={2}
               className="flex-1 rounded-md px-3 py-2 text-[13px] border resize-y"
               style={{ borderColor: 'var(--line)' }}
@@ -144,7 +144,7 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
           </div>
           <div className="flex items-center justify-between">
             <p className="text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
-              Search terms are what we match against importers and distributors — keep them specific.
+              Search terms are what we match against importers and distributors. Keep them specific.
             </p>
             <button
               type="button"
@@ -161,7 +161,7 @@ export default function ProductsEditor({ initial }: { initial: Product[] }) {
       {/* Existing products */}
       <div className="space-y-3">
         {products.length === 0 && (
-          <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+          <p className="empty-note">
             No products yet. Add what you sell above and the next run will search for it.
           </p>
         )}

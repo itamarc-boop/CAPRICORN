@@ -5,10 +5,11 @@ export default function DraftsLoading() {
     <div>
       <span className="sr-only">Loading…</span>
       <div aria-hidden="true">
-        {/* Header */}
-        <div className="mb-6 pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
-          <div className="skel w-32 h-8" />
-          <div className="skel mt-2 w-72 h-3" />
+        {/* Masthead */}
+        <div className="mb-8 pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
+          <div className="skel w-20 h-2.5" />
+          <div className="skel mt-2.5 w-36 h-10" />
+          <div className="skel mt-3 w-72 h-3" />
         </div>
 
         {/* Status pills row */}

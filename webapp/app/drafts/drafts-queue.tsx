@@ -5,6 +5,7 @@ import { getBrowserSupabase } from '@/lib/supabase/browser';
 import {
   DRAFT_LANGUAGES,
   DRAFT_STATUSES,
+  DRAFT_STATUS_LABELS,
   DRAFT_STATUS_STYLES,
   titleCase,
   type DraftStatus,
@@ -354,7 +355,7 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
   // ── Render ──────────────────────────────────────────────────────
   if (drafts.length === 0) {
     return (
-      <p className="text-[13px] italic" style={{ color: 'var(--ink-4)' }}>
+      <p className="empty-note">
         No drafts yet. Generate drafts from the{' '}
         <Link href="/companies" className="link-soft">Companies</Link> page, then review them here.
       </p>
@@ -406,7 +407,7 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
           {DRAFT_STATUSES.map(s => (
             <FilterPill
               key={s}
-              label={s}
+              label={DRAFT_STATUS_LABELS[s]}
               count={statusCounts[s] ?? 0}
               selected={statusFilter === s}
               ink={DRAFT_STATUS_STYLES[s].ink}
@@ -463,16 +464,13 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
 
       {/* Grouped list: country → company → draft rows */}
       {visible.length === 0 ? (
-        <p className="text-[13px] italic" style={{ color: 'var(--ink-4)' }}>
+        <p className="empty-note">
           No drafts match the current filters.
         </p>
       ) : (
         grouped.map(([country, companies]) => (
           <section key={country || 'no-country'} className="mb-6">
-            <div
-              className="text-[10.5px] uppercase tracking-wider mb-2"
-              style={{ color: 'var(--ink-4)' }}
-            >
+            <div className="micro-label mb-2">
               {country ? titleCase(country) : 'No country'}
             </div>
             <div className="card-soft overflow-hidden">
@@ -499,8 +497,8 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                         <button
                           type="button"
                           onClick={() => toggleExpand(d)}
-                          className="w-full text-left px-4 py-2.5 transition-colors cursor-pointer"
-                          style={{ background: expanded ? 'var(--surface-2)' : 'transparent' }}
+                          className={`w-full text-left px-4 py-2.5 cursor-pointer ${expanded ? '' : 'row-hover'}`}
+                          style={expanded ? { background: 'var(--surface-2)' } : undefined}
                         >
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="text-[13px]" style={{ color: 'var(--ink)' }}>
@@ -513,7 +511,7 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                               className="font-tabular text-[12px]"
                               style={{ color: 'var(--ink-2)' }}
                             >
-                              {d.contacts?.email ?? '—'}
+                              {d.contacts?.email ?? '·'}
                             </span>
                             <span className="ml-auto flex flex-wrap items-center gap-2.5">
                               <span className="text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
@@ -529,7 +527,7 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                                 className="pill"
                                 style={{ color: pill.ink, background: pill.bg }}
                               >
-                                {d.status}
+                                {DRAFT_STATUS_LABELS[d.status]}
                               </span>
                               <span
                                 className="font-tabular text-[11.5px]"
@@ -710,8 +708,8 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
                             )}
 
                             {d.status === 'sending' && (
-                              <div className="text-[12px] italic" style={{ color: 'var(--ink-4)' }}>
-                                sending…
+                              <div className="empty-note">
+                                Sending…
                               </div>
                             )}
 
@@ -768,12 +766,7 @@ export default function DraftsQueue({ initialDrafts }: { initialDrafts: QueueDra
           style={{ background: 'rgba(15, 46, 58, 0.35)' }}
         >
           <div className="card-soft rise-in w-full max-w-md p-5">
-            <div
-              className="text-[10.5px] uppercase tracking-wider mb-2"
-              style={{ color: 'var(--ink-4)' }}
-            >
-              Send queue
-            </div>
+            <div className="micro-label mb-2">Send queue</div>
             <p className="text-[13.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
               Send {approvedCount} emails from the connected Gmail, going out at about one per
               minute (about {estMinutes} minutes)?
@@ -837,10 +830,7 @@ function FilterPill({
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label
-      className="block text-[10.5px] uppercase tracking-wider mb-1"
-      style={{ color: 'var(--ink-4)' }}
-    >
+    <label className="micro-label block mb-1">
       {children}
     </label>
   );

@@ -175,14 +175,14 @@ export default async function CompanyDetailPage(
 
   /* ── Activity timeline, assembled server-side ───────────────── */
 
-  type ActivityItem = { key: string; ts: string; icon: string; title: ReactNode; detail?: ReactNode };
+  type ActivityItem = { key: string; ts: string; dot: string; title: ReactNode; detail?: ReactNode };
 
   const activity: ActivityItem[] = [];
   for (const e of emailLog) {
     activity.push({
       key: `email-${e.id}`,
       ts: e.sent_at,
-      icon: '✉',
+      dot: 'var(--ok-ink)',
       title: (
         <>Email sent to <span className="font-tabular">{e.to_email ?? 'unknown recipient'}</span></>
       ),
@@ -194,7 +194,7 @@ export default async function CompanyDetailPage(
     activity.push({
       key: `draft-${d.id}`,
       ts: d.created_at,
-      icon: '✎',
+      dot: style.ink,
       title: (
         <>
           Draft{' '}
@@ -210,14 +210,14 @@ export default async function CompanyDetailPage(
     activity.push({
       key: 'status',
       ts: company.status_changed_at,
-      icon: '⟳',
+      dot: 'var(--info-ink)',
       title: <>Status: {COMPANY_STATUS_LABELS[company.status]}</>,
     });
   }
   activity.push({
     key: 'imported',
     ts: company.created_at,
-    icon: '✦',
+    dot: 'var(--muted-ink)',
     title: (
       <>
         Imported from pipeline ·{' '}
@@ -246,6 +246,7 @@ export default async function CompanyDetailPage(
 
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 mt-2.5">
           <div className="min-w-0">
+            <div className="micro-label mb-2">Company</div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <h1
                 className="font-display text-[30px] leading-tight"
@@ -509,18 +510,15 @@ export default async function CompanyDetailPage(
                   <li key={item.key} className="relative">
                     <span
                       aria-hidden
-                      className="absolute w-2 h-2 rounded-full border"
+                      className="absolute w-2 h-2 rounded-full"
                       style={{
                         left: '-24.5px',
                         top: '6px',
-                        background: 'var(--surface)',
-                        borderColor: 'var(--navy)',
+                        background: item.dot,
+                        boxShadow: '0 0 0 2px var(--surface)',
                       }}
                     />
                     <div className="flex items-baseline gap-2 text-[13px]">
-                      <span aria-hidden className="shrink-0" style={{ color: 'var(--ink-4)' }}>
-                        {item.icon}
-                      </span>
                       <span className="font-medium min-w-0" style={{ color: 'var(--ink)' }}>
                         {item.title}
                       </span>
@@ -533,7 +531,7 @@ export default async function CompanyDetailPage(
                     </div>
                     {item.detail && (
                       <div
-                        className="text-[12px] mt-0.5 pl-[22px] truncate"
+                        className="text-[12px] mt-0.5 truncate"
                         style={{ color: 'var(--ink-3)' }}
                       >
                         {item.detail}
@@ -543,7 +541,7 @@ export default async function CompanyDetailPage(
                 ))}
               </ol>
             ) : (
-              <p className="text-[13px] italic" style={{ color: 'var(--ink-4)' }}>
+              <p className="empty-note">
                 No activity yet. Generate a draft or send an email.
               </p>
             )}
@@ -665,10 +663,8 @@ function Section({
 }) {
   return (
     <section id={id} className="card-soft p-5 scroll-mt-24">
-      <div className="flex items-baseline justify-between mb-3.5">
-        <h2 className="font-display text-[15px]" style={{ color: 'var(--navy-deep)' }}>
-          {title}
-        </h2>
+      <div className="section-head mb-4">
+        <h2 className="section-title">{title}</h2>
         {subtitle && (
           <span
             className="text-[10.5px] uppercase tracking-wider"

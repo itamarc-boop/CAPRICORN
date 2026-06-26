@@ -89,7 +89,7 @@ export default function LoginPage() {
 
       <div className="flex items-center gap-3 my-6" aria-hidden>
         <div className="h-px flex-1" style={{ background: 'var(--line)' }} />
-        <span className="text-[10.5px] uppercase tracking-wider" style={{ color: 'var(--ink-4)' }}>
+        <span className="micro-label" style={{ color: 'var(--ink-4)' }}>
           or
         </span>
         <div className="h-px flex-1" style={{ background: 'var(--line)' }} />

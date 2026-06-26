@@ -32,7 +32,10 @@ export default async function CompaniesPage({
 
   if (companiesRes.error) {
     return (
-      <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div
+        className="rounded p-4 text-[13px]"
+        style={{ background: 'var(--danger-bg)', color: 'var(--danger-ink)' }}
+      >
         Failed to load companies: {companiesRes.error.message}
       </div>
     );
@@ -79,22 +82,20 @@ export default async function CompaniesPage({
 
   return (
     <div>
-      <div className="flex items-end justify-between mb-6 pb-5 rule-soft border-t-0 border-b border-[color:var(--line)]">
+      <div className="flex items-end justify-between mb-8 pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
         <div>
-          <h1 className="font-display text-[34px] leading-none" style={{ color: 'var(--navy-deep)' }}>
+          <div className="micro-label mb-2">Pipeline</div>
+          <h1 className="font-display text-[40px] leading-none" style={{ color: 'var(--navy-deep)' }}>
             Companies
           </h1>
-          <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-            Every qualified company in the pipeline, with contacts and funnel status.
+          <p className="mt-3 text-[13px]" style={{ color: 'var(--ink-3)' }}>
+            <span className="font-tabular" style={{ color: 'var(--ink)' }}>{companies.length}</span> qualified companies, with contacts and funnel status.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <a href={exportHref} className="btn-ghost text-[12.5px] whitespace-nowrap">
+        <div className="flex items-center gap-2">
+          <a href={exportHref} className="btn-ghost text-[13px] whitespace-nowrap">
             Download Excel
           </a>
-          <span className="font-tabular text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-            {companies.length} total
-          </span>
         </div>
       </div>
       <CompaniesTable

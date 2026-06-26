@@ -462,7 +462,7 @@ export default function EmailPanel({
               return (
                 <li
                   key={d.id}
-                  className="rounded border px-3 py-2.5"
+                  className="row-hover rounded border px-3 py-2.5"
                   style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}
                 >
                   <div className="flex items-start justify-between gap-2">

@@ -260,12 +260,8 @@ export default function CompaniesTable({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td
-                  colSpan={9}
-                  className="text-center py-10 text-[13px] italic"
-                  style={{ color: 'var(--ink-4)' }}
-                >
-                  No companies match the current filters.
+                <td colSpan={9} className="text-center py-10">
+                  <span className="empty-note">No companies match these filters.</span>
                 </td>
               </tr>
             )}

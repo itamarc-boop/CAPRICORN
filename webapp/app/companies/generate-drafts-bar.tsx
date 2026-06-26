@@ -134,9 +134,7 @@ export default function GenerateDraftsBar({
     >
       <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center gap-x-4 gap-y-2.5">
         <div className="min-w-[200px]">
-          <div className="text-[10.5px] uppercase tracking-wider" style={{ color: 'var(--ink-4)' }}>
-            Generate drafts
-          </div>
+          <div className="micro-label">Generate drafts</div>
           <div className="text-[12.5px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
             <span className="font-tabular">{selectedCompanies.length}</span> companies ·{' '}
             <span className="font-tabular">{total}</span> contacts targeted

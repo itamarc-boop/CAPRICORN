@@ -25,21 +25,30 @@ export default async function DiscoverPage() {
     );
   }
 
+  const runRows = (runs ?? []) as PipelineRun[];
+  const activeRuns = runRows.filter(
+    (r) => r.status === 'queued' || r.status === 'running',
+  ).length;
+  const succeededRuns = runRows.filter((r) => r.status === 'succeeded').length;
+
   return (
     <div>
-      <div className="mb-6 pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
-        <h1
-          className="font-display text-[34px] leading-none"
-          style={{ color: 'var(--navy-deep)' }}
-        >
-          Discover leads
-        </h1>
-        <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-          Find new importer and distributor leads in any market. A run takes a few minutes
-          and adds new companies to your pipeline that you can email right away.
-        </p>
+      <div className="flex items-end justify-between mb-8 pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
+        <div>
+          <div className="micro-label mb-2">Lead Discovery</div>
+          <h1 className="font-display text-[40px] leading-none" style={{ color: 'var(--navy-deep)' }}>
+            Discover leads
+          </h1>
+          <p className="mt-3 text-[13px]" style={{ color: 'var(--ink-3)' }}>
+            <span className="font-tabular" style={{ color: 'var(--ink)' }}>{runRows.length}</span> runs
+            <span className="mx-2" style={{ color: 'var(--ink-4)' }}>·</span>
+            <span className="font-tabular" style={{ color: 'var(--ink)' }}>{activeRuns}</span> in progress
+            <span className="mx-2" style={{ color: 'var(--ink-4)' }}>·</span>
+            <span className="font-tabular" style={{ color: 'var(--ink)' }}>{succeededRuns}</span> delivered
+          </p>
+        </div>
       </div>
-      <DiscoveryPanel initialRuns={(runs ?? []) as PipelineRun[]} role={appUser.role} />
+      <DiscoveryPanel initialRuns={runRows} role={appUser.role} />
     </div>
   );
 }

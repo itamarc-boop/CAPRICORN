@@ -145,11 +145,9 @@ export default function TodayQueue() {
   const nothing = loaded && toReview.length === 0 && replies.length === 0 && failed.length === 0;
 
   return (
-    <section className="mb-8">
-      <div className="flex items-end justify-between pb-3 mb-4 border-b" style={{ borderColor: 'var(--line)' }}>
-        <h2 className="font-display text-[20px] leading-none" style={{ color: 'var(--navy-deep)' }}>
-          Today
-        </h2>
+    <section className="mb-10">
+      <div className="section-head mb-4">
+        <h2 className="section-title">Today</h2>
         <Link href="/drafts" className="link-soft text-[12.5px]">
           All drafts →
         </Link>
@@ -176,7 +174,7 @@ export default function TodayQueue() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Drafts to review — inline Approve */}
-          <QueueColumn label="Drafts to review" count={toReview.length}>
+          <QueueColumn label="Drafts to review" count={toReview.length} accent="var(--info-ink)">
             {toReview.slice(0, SHOWN).map((d) => (
               <QueueRow key={d.id}>
                 <div className="min-w-0">
@@ -200,7 +198,7 @@ export default function TodayQueue() {
           </QueueColumn>
 
           {/* Replies to chase — open the dossier */}
-          <QueueColumn label="Replies to chase" count={replies.length}>
+          <QueueColumn label="Replies to chase" count={replies.length} accent="var(--ok-ink)">
             {replies.slice(0, SHOWN).map((r) => (
               <QueueRow key={r.id}>
                 <div className="min-w-0">
@@ -218,7 +216,7 @@ export default function TodayQueue() {
           </QueueColumn>
 
           {/* Failed sends — inline Requeue */}
-          <QueueColumn label="Failed sends" count={failed.length}>
+          <QueueColumn label="Failed sends" count={failed.length} accent="var(--danger-ink)">
             {failed.slice(0, SHOWN).map((d) => (
               <QueueRow key={d.id}>
                 <div className="min-w-0">
@@ -248,16 +246,23 @@ export default function TodayQueue() {
 function QueueColumn({
   label,
   count,
+  accent,
   children,
 }: {
   label: string;
   count: number;
+  accent: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="card-soft p-4">
+    <div className="card-soft p-4" style={{ borderTop: `2px solid ${accent}` }}>
       <div className="flex items-baseline justify-between mb-2.5">
-        <div className="text-[10.5px] uppercase tracking-wider font-semibold" style={{ color: 'var(--ink-3)' }}>
+        <div className="micro-label flex items-center gap-1.5">
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full"
+            style={{ background: accent }}
+            aria-hidden
+          />
           {label}
         </div>
         <div className="font-tabular text-[13px]" style={{ color: 'var(--ink-3)' }}>
@@ -265,18 +270,18 @@ function QueueColumn({
         </div>
       </div>
       {count === 0 ? (
-        <p className="text-[12px] italic" style={{ color: 'var(--ink-4)' }}>
-          Nothing here.
-        </p>
+        <p className="empty-note">Nothing here.</p>
       ) : (
-        <ul className="space-y-1">{children}</ul>
+        <ul className="space-y-0.5">{children}</ul>
       )}
     </div>
   );
 }
 
 function QueueRow({ children }: { children: React.ReactNode }) {
-  return <li className="flex items-center gap-2 py-1.5">{children}</li>;
+  return (
+    <li className="row-hover -mx-2 flex items-center gap-2 rounded px-2 py-1.5">{children}</li>
+  );
 }
 
 function CompanyLink({ id, name }: { id: string | null; name: string | null | undefined }) {
