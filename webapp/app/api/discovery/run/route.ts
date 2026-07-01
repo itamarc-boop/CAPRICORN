@@ -13,7 +13,7 @@ type Body = {
 };
 
 const TARGET_MIN = 5;
-const TARGET_MAX = 60;
+const TARGET_MAX = 25; // matches the pipeline's RUN_MAX_TARGET clamp (tools/run_pipeline.py)
 const TARGET_DEFAULT = 25;
 
 /** lowercase, non-alnum -> '-', collapse + trim dashes. */
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unsupported_country' }, { status: 400 });
   }
 
-  // Coerce target_leads to int, clamp to [5,60], default 25.
+  // Coerce target_leads to int, clamp to [5,25], default 25.
   let target_leads = TARGET_DEFAULT;
   const raw = payload.target_leads;
   const parsed =

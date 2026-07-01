@@ -48,7 +48,7 @@ function friendlyRunError(raw: string | null): string {
 }
 
 const TARGET_MIN = 5;
-const TARGET_MAX = 60;
+const TARGET_MAX = 25; // matches the pipeline's RUN_MAX_TARGET clamp + the API route
 const TARGET_STEP = 5;
 const TARGET_DEFAULT = 25;
 

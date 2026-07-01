@@ -134,6 +134,8 @@ PROSPECT_FETCH_CAP = 200
 # RUN_MAX_TARGET).
 MAX_DISCOVER_FETCH = 200   # max business records discovery may fetch per run
 RUN_MAX_TARGET = 25        # clamp the requested target before any spend
+MIN_DISCOVER_PAGE = 10     # smallest page to fall back to when Explorium says
+                           # we've paged past a query's actual matching set
 
 
 # ---------------------------------------------------------------------------
@@ -547,8 +549,31 @@ def run_pipeline(run_id: str, country: str, target: int) -> None:
         # but never past the hard discovery ceiling.
         while (len(buffer) < batch_size and not exhausted
                and discovered_total < discover_fetch_cap):
-            data = client.fetch_businesses_page(
-                base_filters, page=page, page_size=discover_page_size)
+            try:
+                data = client.fetch_businesses_page(
+                    base_filters, page=page, page_size=discover_page_size)
+            except ExploriumError as exc:
+                # Explorium's /businesses fetch returns a HARD 422 ("page_size *
+                # page_num exceeds the maximum results size") once we page past a
+                # query's ACTUAL matching set. The free stats estimate over-counts,
+                # so a restrictive keyword+country query can have far fewer real
+                # records than estimated (e.g. UK est. 3,325 but only a few dozen
+                # fetchable). Never crash the run on this: if we haven't fetched
+                # anything yet, shrink to the minimum page and retry this page to
+                # grab whatever few exist; otherwise we've reached the end of the
+                # pool — stop and deliver what we have.
+                if exc.status == 422 and "maximum results size" in str(exc).lower():
+                    if discovered_total == 0 and discover_page_size > MIN_DISCOVER_PAGE:
+                        print(f"[discover] Explorium result-size limit at page {page}; "
+                              f"retrying with page_size={MIN_DISCOVER_PAGE}.")
+                        discover_page_size = MIN_DISCOVER_PAGE
+                        continue
+                    print(f"[discover] Explorium result-size limit reached at page "
+                          f"{page} (fetched {discovered_total}); treating as "
+                          "exhausted and delivering what we have.")
+                    exhausted = True
+                    break
+                raise
             page += 1
             discovered_total += len(data)
             if len(data) < discover_page_size:
